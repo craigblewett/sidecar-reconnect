@@ -21,12 +21,23 @@ die()  { printf '\033[31m==>\033[0m %s\n' "$*" >&2; exit 1; }
 command -v swiftc >/dev/null 2>&1 || die "swiftc not found — run: xcode-select --install"
 
 SHARED=("$HERE"/Sources/Shared/*.swift)
+# The Android second-display engine, vendored from Side Screen. App only — the
+# CLI has no use for a video pipeline and shouldn't carry one.
+VENDOR=("$HERE"/Sources/Vendor/*.swift "$HERE"/Sources/Vendor/SideScreen/*.swift)
+VENDOR_INC="$HERE/Sources/Vendor/SideScreen"
+
+# Deployment target, not the host's version. Two reasons: the app claims macOS 13
+# in Info.plist and a binary built without this demands whatever the build
+# machine runs; and the vendored ScreenCapture.swift falls back to CGDisplayStream,
+# which the macOS 26 SDK marks unavailable above 13.
+TARGET="$(uname -m)-apple-macosx13.0"
 
 say "Building $APP_NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-swiftc -O -framework AppKit \
-    "${SHARED[@]}" "$HERE/Sources/App/main.swift" \
+swiftc -O -framework AppKit -target "$TARGET" \
+    -I "$VENDOR_INC" -Xcc -fmodule-map-file="$VENDOR_INC/module.modulemap" \
+    "${SHARED[@]}" "${VENDOR[@]}" "$HERE/Sources/App/main.swift" \
     -o "$APP/Contents/MacOS/$APP_NAME"
 cp "$HERE/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$HERE/scripts/sidecar-connect-ui.applescript" "$APP/Contents/Resources/"
@@ -45,7 +56,8 @@ codesign --force --sign - --timestamp=none "$APP" 2>/dev/null \
 
 say "Building sidecarctl"
 mkdir -p "$BUILD_DIR"
-swiftc -O "${SHARED[@]}" "$HERE/Sources/CLI/main.swift" -o "$BUILD_DIR/sidecarctl"
+swiftc -O -target "$TARGET" "${SHARED[@]}" "$HERE/Sources/CLI/main.swift" \
+    -o "$BUILD_DIR/sidecarctl"
 
 say "Installing"
 mkdir -p "$APP_DEST" "$CLI_DEST"
