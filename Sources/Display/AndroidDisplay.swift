@@ -62,6 +62,15 @@ public final class AndroidDisplay {
 
     public private(set) var pairing: Pairing?
 
+    /// Tablets that have paired before. They hold a token and reconnect without
+    /// a code, so the menu shouldn't wave a fresh one at the user as if the
+    /// pairing had been lost.
+    public var knownDevices: [String] {
+        PairedDeviceStore(defaults: Self.defaults).all()
+            .sorted { $0.lastConnected > $1.lastConnected }
+            .map(\.name)
+    }
+
     /// Live figures from the engine, for the menu. Frames per second actually
     /// delivered, and the bitrate they cost.
     public private(set) var throughput: (fps: Double, mbps: Double)?
@@ -153,6 +162,8 @@ public final class AndroidDisplay {
         server.pairingMacName = Host.current().localizedName ?? "Mac"
         server.onPairingSuccess = { [weak self] device in
             Log.write("paired with \(device)")
+            PairedDeviceStore(defaults: Self.defaults)
+                .upsert(name: device, lastConnected: Date())
             self?.issuePairingCode(on: server)
         }
         server.onPairingCodeExhausted = { [weak self] in

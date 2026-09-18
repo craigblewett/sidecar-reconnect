@@ -268,12 +268,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // The address and one-time code to type into the tablet. Shown only
         // while we're waiting for one — it disappears the moment it connects.
         if let pairing = android.pairing {
-            let item = NSMenuItem(title: pairing.instruction,
+            // A tablet that's paired before comes back on its own token — tell
+            // the user to hit Reconnect rather than retyping a code.
+            if let known = android.knownDevices.first {
+                let hint = NSMenuItem(
+                    title: "  \(known) is paired — tap Reconnect on the tablet",
+                    action: nil, keyEquivalent: "")
+                hint.isEnabled = false
+                menu.addItem(hint)
+            }
+            let title = android.knownDevices.isEmpty
+                ? pairing.instruction
+                : "Pair another tablet: \(pairing.instruction)"
+            let item = NSMenuItem(title: title,
                                   action: #selector(copyPairingDetails), keyEquivalent: "")
             item.target = self
             item.toolTip = "Click to copy. Enter these in the Side Screen app on your tablet."
             item.attributedTitle = NSAttributedString(
-                string: pairing.instruction,
+                string: title,
                 attributes: [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)])
             menu.addItem(item)
         }
