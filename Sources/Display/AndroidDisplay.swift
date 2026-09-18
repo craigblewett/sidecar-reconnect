@@ -89,6 +89,8 @@ public final class AndroidDisplay {
 
     public var isRunning: Bool { state != .stopped }
 
+    private static var askedForScreenRecording = false
+
     private var display: VirtualDisplayManager?
     private var capture: ScreenCapture?
     private var server: StreamingServer?
@@ -142,7 +144,13 @@ public final class AndroidDisplay {
         //    and asking before creating a display avoids putting one up and
         //    tearing it straight back down in front of the user.
         guard CGPreflightScreenCaptureAccess() else {
-            CGRequestScreenCaptureAccess()
+            // Ask once per launch. CGRequestScreenCaptureAccess opens System
+            // Settings, and calling it on every retry means the pane reopens
+            // each time — infuriating when the user is already looking at it.
+            if !Self.askedForScreenRecording {
+                Self.askedForScreenRecording = true
+                CGRequestScreenCaptureAccess()
+            }
             throw Failure.needsScreenRecording
         }
 
@@ -281,8 +289,9 @@ public final class AndroidDisplay {
                 return "macOS accepted the virtual display but never registered it. "
                      + "Use “Copy Diagnostics” — CGVirtualDisplay may have changed."
             case .needsScreenRecording:
-                return "Screen Recording permission is needed to send the screen. "
-                     + "Allow it in System Settings › Privacy & Security › Screen Recording, then try again."
+                return "Screen Recording permission is needed. If SidecarReconnect is "
+                     + "already listed and switched on there, the entry is stale: remove it "
+                     + "with the “−” button, then start sharing again to be asked afresh."
             }
         }
     }
