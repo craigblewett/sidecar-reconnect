@@ -264,6 +264,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let androidStatus = NSMenuItem(title: android.state.summary, action: nil, keyEquivalent: "")
         androidStatus.isEnabled = false
         menu.addItem(androidStatus)
+
+        // The address and one-time code to type into the tablet. Shown only
+        // while we're waiting for one — it disappears the moment it connects.
+        if let pairing = android.pairing {
+            let item = NSMenuItem(title: pairing.instruction,
+                                  action: #selector(copyPairingDetails), keyEquivalent: "")
+            item.target = self
+            item.toolTip = "Click to copy. Enter these in the Side Screen app on your tablet."
+            item.attributedTitle = NSAttributedString(
+                string: pairing.instruction,
+                attributes: [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)])
+            menu.addItem(item)
+        }
         add(menu, android.isRunning ? "Stop Sharing to Android Tablet"
                                     : "Share Screen to Android Tablet…",
             #selector(toggleAndroidDisplay))
@@ -408,6 +421,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleAutoReconnect() { Prefs.autoReconnectOnWake.toggle() }
     @objc private func toggleCleanDisconnect() { Prefs.disconnectBeforeSleep.toggle() }
+
+    @objc private func copyPairingDetails() {
+        guard let pairing = AndroidDisplay.shared.pairing else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("\(pairing.address):\(pairing.port)", forType: .string)
+        notify("Copied \(pairing.address):\(pairing.port) — code \(PairingCode.display(pairing.code))")
+    }
 
     @objc private func toggleAndroidDisplay() {
         let android = AndroidDisplay.shared

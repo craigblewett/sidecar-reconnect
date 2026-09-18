@@ -24,6 +24,10 @@ public final class AndroidDisplay {
     /// different number.
     public static let defaultPort: UInt16 = 54321
 
+    /// Same suite as every other preference, so the auth token doesn't end up
+    /// in a second domain nobody thinks to clear.
+    private static let defaults = UserDefaults(suiteName: Prefs.suiteName) ?? .standard
+
     public enum State: Equatable {
         case stopped
         case starting
@@ -42,6 +46,21 @@ public final class AndroidDisplay {
             }
         }
     }
+
+    /// What to type into the tablet to pair it the first time. `nil` once a
+    /// tablet is connected, or before the server is up.
+    public struct Pairing {
+        public let code: String
+        public let address: String
+        public let port: UInt16
+
+        /// One line, ready to put in a menu item.
+        public var instruction: String {
+            "Pair: \(address):\(port)   code \(PairingCode.display(code))"
+        }
+    }
+
+    public private(set) var pairing: Pairing?
 
     /// Delivered on the main queue so the menu can update without hopping.
     public var onStateChange: ((State) -> Void)?
@@ -119,17 +138,37 @@ public final class AndroidDisplay {
         // 3. The server the tablet talks to.
         let server = StreamingServer(port: port)
         server.touchEnabled = Prefs.androidTouch
+
+        // Wireless mode. Without an auth token the server drops every client
+        // that isn't on loopback, which would restrict us to tablets reachable
+        // through adb — and that needs USB debugging turned on, which not every
+        // tablet will allow. With it, the tablet can arrive over WiFi or over
+        // USB tethering, neither of which needs developer options.
+        server.expectedAuthToken = WirelessAuth.loadOrCreate(defaults: Self.defaults)
+        server.pairingMacName = Host.current().localizedName ?? "Mac"
+        server.onPairingSuccess = { [weak self] device in
+            Log.write("paired with \(device)")
+            self?.issuePairingCode(on: server)
+        }
+        server.onPairingCodeExhausted = { [weak self] in
+            Log.write("too many wrong pairing codes — issuing a fresh one")
+            self?.issuePairingCode(on: server)
+        }
         server.onTouchEvent = { [weak self] x, y, action, pointers, x2, y2 in
             self?.touch.handle(x: x, y: y, action: action, pointerCount: pointers,
                                x2: x2, y2: y2, on: displayID)
         }
-        server.onClientConnected = { [weak self] in self?.state = .streaming }
+        server.onClientConnected = { [weak self] in
+            self?.pairing = nil          // paired and connected; stop advertising a code
+            self?.state = .streaming
+        }
         server.onClientDisconnected = { [weak self] in
             guard let self = self, self.isRunning else { return }
             self.state = .waiting
         }
         try await server.start()
         self.server = server
+        issuePairingCode(on: server)
 
         // 4. Over the cable, the tablet reaches us through adb's reverse
         //    forward. Wireless clients dial the Mac directly and need none of
@@ -142,6 +181,19 @@ public final class AndroidDisplay {
         state = .waiting
     }
 
+    /// Codes are single-use: one is issued when the server comes up, and a new
+    /// one after each success or after the attempt budget is spent, so a code
+    /// seen over someone's shoulder is worth nothing twice.
+    private func issuePairingCode(on server: StreamingServer) {
+        let code = PairingCode.generate()
+        server.expectedPairingCode = code
+        let address = LANAddressResolver.primaryIPv4() ?? "this Mac's IP address"
+        pairing = Pairing(code: code, address: address, port: Prefs.androidPort)
+        Log.write("pairing code ready — \(address):\(Prefs.androidPort) code \(PairingCode.display(code))")
+        let current = state
+        DispatchQueue.main.async { [weak self] in self?.onStateChange?(current) }
+    }
+
     private func tearDown() {
         capture?.stopStreaming()
         server?.stop()
@@ -149,6 +201,7 @@ public final class AndroidDisplay {
         capture = nil
         server = nil
         display = nil
+        pairing = nil
     }
 
     // MARK: adb
