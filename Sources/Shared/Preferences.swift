@@ -18,6 +18,17 @@ public enum Prefs {
         static let uiFallback = "uiFallback"
         static let notify = "notify"
         static let attempts = "attemptsPerRung"
+        // Android second display
+        static let androidPort = "androidPort"
+        static let androidWidth = "androidWidth"
+        static let androidHeight = "androidHeight"
+        static let androidHiDPI = "androidHiDPI"
+        static let androidBitrate = "androidBitrateMbps"
+        static let androidTouch = "androidTouch"
+        static let androidUSB = "androidUSB"
+        static let androidFrameRate = "androidFrameRate"
+        static let androidWasSharing = "androidWasSharing"
+        static let androidArrangement = "androidArrangement"
     }
 
     static func registerDefaults() {
@@ -30,7 +41,81 @@ public enum Prefs {
             Key.uiFallback: false,
             Key.notify: true,
             Key.attempts: 3,
+            // 54321 is what Side Screen's Android app offers by default, so
+            // their released APK pairs with us without being reconfigured.
+            Key.androidPort: 54321,
+            Key.androidWidth: 1920,
+            Key.androidHeight: 1200,
+            Key.androidHiDPI: false,
+            Key.androidBitrate: 20,
+            Key.androidTouch: true,
+            Key.androidUSB: true,
+            Key.androidFrameRate: 30,
+            Key.androidArrangement: "right",
         ])
+    }
+
+    // MARK: Android second display
+
+    public static var androidPort: UInt16 {
+        get { UInt16(exactly: defaults.integer(forKey: Key.androidPort)) ?? 54321 }
+        set { defaults.set(Int(newValue), forKey: Key.androidPort) }
+    }
+
+    public static var androidWidth: Int {
+        get { max(640, defaults.integer(forKey: Key.androidWidth)) }
+        set { defaults.set(newValue, forKey: Key.androidWidth) }
+    }
+
+    public static var androidHeight: Int {
+        get { max(480, defaults.integer(forKey: Key.androidHeight)) }
+        set { defaults.set(newValue, forKey: Key.androidHeight) }
+    }
+
+    public static var androidHiDPI: Bool {
+        get { defaults.bool(forKey: Key.androidHiDPI) }
+        set { defaults.set(newValue, forKey: Key.androidHiDPI) }
+    }
+
+    public static var androidBitrate: Int {
+        get { max(1, defaults.integer(forKey: Key.androidBitrate)) }
+        set { defaults.set(newValue, forKey: Key.androidBitrate) }
+    }
+
+    /// A steady 30 looks smoother than an unstable 50 on a modest tablet
+    /// decoder, which is what the pipeline stats showed on a Kirin 710A.
+    public static var androidFrameRate: Int {
+        get { min(60, max(15, defaults.integer(forKey: Key.androidFrameRate))) }
+        set { defaults.set(newValue, forKey: Key.androidFrameRate) }
+    }
+
+    /// Whether sharing was active when we last shut down. Rebuilding the app
+    /// relaunches it, and having the tablet's display silently not come back —
+    /// while the tablet sits there reporting it can't reach the Mac — is a
+    /// worse failure than restoring something the user has finished with.
+    public static var androidWasSharing: Bool {
+        get { defaults.bool(forKey: Key.androidWasSharing) }
+        set { defaults.set(newValue, forKey: Key.androidWasSharing) }
+    }
+
+    /// Where the tablet sits relative to the main screen. Stored so the
+    /// arrangement survives restarts — macOS forgets a virtual display's place
+    /// the moment it goes away.
+    public static var androidArrangement: String {
+        get { defaults.string(forKey: Key.androidArrangement) ?? "right" }
+        set { defaults.set(newValue, forKey: Key.androidArrangement) }
+    }
+
+    public static var androidTouch: Bool {
+        get { defaults.bool(forKey: Key.androidTouch) }
+        set { defaults.set(newValue, forKey: Key.androidTouch) }
+    }
+
+    /// Whether to set up adb reverse forwarding for a cabled tablet. Harmless
+    /// when the tablet is wireless — it just finds no USB device and says so.
+    public static var androidUSB: Bool {
+        get { defaults.bool(forKey: Key.androidUSB) }
+        set { defaults.set(newValue, forKey: Key.androidUSB) }
     }
 
     /// Empty means "the only device that's visible", which is the common case

@@ -1,28 +1,44 @@
 # SidecarReconnect
 
-A menu bar app that gets a wedged macOS **Sidecar** connection back, without
-restarting the iPad or the Mac.
+One menu bar app for the extra screens on your desk: it keeps a **Sidecar** iPad
+connected, drives an **Android tablet** as a second display, and arranges every
+screen the Mac has.
 
-The problem it solves: the Mac sleeps with the iPad attached, and in the morning
+**The iPad half.** The Mac sleeps with the iPad attached, and in the morning
 mirroring doesn't come back. The iPad may still be listed under Screen Mirroring
 but picking it does nothing — or it isn't listed at all, even though it's sitting
-right there on a USB-C cable. The usual fix is rebooting the iPad, which is a
-slow way to start a day.
+right there on a USB-C cable. The usual fix is rebooting the iPad, which is a slow
+way to start a day. This closes the session properly before sleep so it doesn't
+wedge in the first place, and climbs a ladder of fixes when it does.
 
-It sits next to the Screen Mirroring icon and shows at a glance whether the iPad
-is connected. Most mornings you shouldn't have to click it at all: it notices the
-Mac waking and restores the connection on its own.
+**The Android half.** macOS has no Sidecar for Android, so this builds one: a
+virtual display, captured and encoded on the Mac, streamed to the
+[Side Screen](https://github.com/tranvuongquocdat/SideScreen) app on the tablet,
+with touch coming back the other way. The streaming engine is Side Screen's own,
+vendored under `Sources/Vendor/` — see [the note there](Sources/Vendor/SideScreen/README.md).
+
+**Arranging them.** Sidecar iPad, Android tablet, HDMI monitor and the built-in
+screen all live in one coordinate space, so they're all arranged from one window
+— drag them around, edges snap together.
 
 ## The menu
 
 ```
-▣ Connected — Craig's iPad
+Connected — iPad
 ─────────────────────────────────
 Reconnect Now                  ⌘R
 Bounce Connection
 Disconnect
 ─────────────────────────────────
+Sharing to Android tablet
+  57 fps · 2.6 Mbps
+Stop Sharing to Android Tablet
+Arrange Displays                  ▸   each screen, or "Arrange Visually…"
+Tablet Resolution                 ▸   1920×1200 … 1024×640, and Retina
+Tablet Quality                    ▸   24/30/45/60 fps, 8–30 Mbps
+─────────────────────────────────
 Reconnect Automatically After Wake  ✓
+Disconnect Cleanly Before Sleep     ✓
 Connection                        ▸   Wired (USB-C) ✓ / Wireless / Automatic
 Extra Fixes                       ▸   Bounce Bluetooth / Control Center fallback
 Show Notifications                ✓
@@ -35,7 +51,9 @@ Quit
 ```
 
 The icon pulses while it's working, and the header line tells you which step it's
-on rather than leaving you guessing.
+on rather than leaving you guessing. It's a screen with a reconnect arrow —
+deliberately not `rectangle.on.rectangle`, which is what macOS's own Screen
+Mirroring icon uses, and which sat next to it looking identical.
 
 ## What "Reconnect" actually does
 
@@ -90,6 +108,53 @@ raises a system alert from macOS, so a full pointless climb used to stack over a
 dozen dialogs. If you see that message, restart the iPad; it's an iPadOS bug, not
 something this app can route around.
 
+## An Android tablet as a second display
+
+macOS offers nothing here, so the whole chain is ours: a virtual display created
+with the private `CGVirtualDisplay` API, captured with ScreenCaptureKit, encoded
+with VideoToolbox, and served over a socket. Touch comes back and is injected as
+`CGEvent`s. Where Sidecar asks macOS to do everything and we just say "connect",
+here every layer is the app's.
+
+The tablet runs Side Screen's own released APK — the wire protocol is unchanged,
+so no modified build is needed. Install it from
+[their releases](https://github.com/tranvuongquocdat/SideScreen/releases), then:
+
+1. **Share Screen to Android Tablet** from the menu. Grant **Screen Recording**
+   when macOS asks, and **Accessibility** if you want touch to work.
+2. The menu shows an address and a one-time code. In the tablet app, choose the
+   **Wireless** tab → *No camera? Enter code instead*, and type them in.
+3. After that the tablet holds a token and reconnects with its **Reconnect**
+   button; no code needed again.
+
+Sharing restores itself when the app launches, so with **Open at Login** on, the
+Mac side needs nothing from you.
+
+### Getting it looking right
+
+Two settings decide almost everything, and they pull against each other:
+
+| | What it does |
+| --- | --- |
+| **Tablet Resolution** | The size of the desktop macOS draws. *Smaller means everything looks bigger* — this is the one to reach for when text is too small, not the bitrate |
+| **Retina** | Renders at double and scales down. Sharper text, four times the pixels for the tablet to decode |
+| **Frame rate** | 24–60. Higher is smoother, and costs the tablet proportionally |
+| **Bitrate** | A ceiling, not a target. Ordinary desktop use sits at 1–5 Mbps whatever it's set to |
+
+On a modest tablet you can have crisp text or smooth motion, not both: Retina at
+30fps, or no Retina at 60fps. The menu shows live fps and Mbps so the trade is
+visible rather than guessed at. The Mac is rarely the constraint — if frame age
+stays low and nothing is dropped, what's left is the tablet's decoder and the
+network.
+
+### Over a cable
+
+`adb reverse` is the lowest-latency path but needs USB Debugging, which not every
+tablet exposes — a Huawei MatePad on HarmonyOS has no Developer options at all.
+**USB tethering** gives the same cable without any of that: it puts the Mac on a
+small private network that exists only along the wire. The app spots that
+interface and offers its address for pairing, marked *(over USB)*.
+
 ## Install
 
 Needs macOS 13+ and Xcode Command Line Tools (`xcode-select --install`).
@@ -133,7 +198,8 @@ sidecarctl dump         # the private API on this macOS
 ```
 
 It shares settings with the app, so the transport you pick in the menu is the one
-the CLI uses.
+the CLI uses. Sidecar only — the Android display needs a virtual display and a
+video pipeline, which belong in the app rather than in a one-shot command.
 
 ## How it works
 
@@ -179,6 +245,18 @@ say so rather than fail silently:
   will re-ask for Accessibility permission if you use the Control Center fallback.
 - **Rung 4 drops Bluetooth** for a few seconds. If your keyboard and trackpad are
   Bluetooth, that's a real interruption — which is why it's off by default.
+- **Two private APIs.** `SidecarCore` for the iPad, `CGVirtualDisplay` for the
+  Android display. Either can change in any macOS release; both are probed
+  rather than assumed, and "Copy Diagnostics" shows what's actually present.
+- **Two-finger gestures aren't implemented.** Touch from the tablet is one
+  finger: move, click and drag. Scroll and pinch are swallowed rather than
+  misread as stray clicks.
+- **The tablet needs one tap** on Reconnect. Side Screen's app only auto-connects
+  from that button, and changing it would mean shipping a modified APK.
+- **Screen Recording and Accessibility** are required for the Android display,
+  and macOS keys those grants to the code signature. `build.sh` signs with a real
+  identity when the keychain has one, so they survive rebuilds; with an ad-hoc
+  signature they'd need re-granting after every build.
 
 ## Uninstall
 

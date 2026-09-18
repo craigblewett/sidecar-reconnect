@@ -10,28 +10,10 @@ import UserNotifications
 
 // MARK: - Menu bar icon
 
-/// SF Symbol names move between releases, so try a few and fall back to text
-/// rather than showing an empty menu bar slot.
-private func symbol(_ names: [String], description: String) -> NSImage? {
-    for name in names {
-        if let image = NSImage(systemSymbolName: name, accessibilityDescription: description) {
-            image.isTemplate = true   // so it follows light/dark menu bars
-            return image
-        }
-    }
-    return nil
-}
-
 private enum Icon {
-    static let connected = symbol(
-        ["rectangle.on.rectangle.fill", "rectangle.on.rectangle", "display"],
-        description: "Sidecar connected")
-    static let disconnected = symbol(
-        ["rectangle.on.rectangle.slash", "rectangle.on.rectangle", "display"],
-        description: "Sidecar disconnected")
-    static let working = symbol(
-        ["arrow.triangle.2.circlepath", "rectangle.on.rectangle"],
-        description: "Reconnecting")
+    static let connected = MenuBarIcon.connected
+    static let disconnected = MenuBarIcon.disconnected
+    static let working = MenuBarIcon.working
 }
 
 // MARK: - App
@@ -69,6 +51,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             self?.refreshIcon()
         }
+        // A failed or finished Android session should show in the menu bar
+        // straight away, not at the next 20s poll.
+        AndroidDisplay.shared.onStateChange = { [weak self] state in
+            self?.refreshIcon()
+            if case .failed(let why) = state { self?.notify(why) }
+        }
+
+        AndroidDisplay.shared.restoreIfWasSharing()
+
         refreshIcon()
         Log.write("SidecarReconnect started")
     }
@@ -251,6 +242,151 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // Android tablet. A separate engine entirely — macOS gives us nothing
+        // here, so the app creates the display and streams it itself.
+        let android = AndroidDisplay.shared
+        let androidStatus = NSMenuItem(title: android.state.summary, action: nil, keyEquivalent: "")
+        androidStatus.isEnabled = false
+        menu.addItem(androidStatus)
+
+        // The address and one-time code to type into the tablet. Shown only
+        // while we're waiting for one — it disappears the moment it connects.
+        if let pairing = android.pairing {
+            // A tablet that's paired before comes back on its own token — tell
+            // the user to hit Reconnect rather than retyping a code.
+            if let known = android.knownDevices.first {
+                let hint = NSMenuItem(
+                    title: "  \(known) is paired — tap Reconnect on the tablet",
+                    action: nil, keyEquivalent: "")
+                hint.isEnabled = false
+                menu.addItem(hint)
+            }
+            let title = android.knownDevices.isEmpty
+                ? pairing.instruction
+                : "Pair another tablet: \(pairing.instruction)"
+            let item = NSMenuItem(title: title,
+                                  action: #selector(copyPairingDetails), keyEquivalent: "")
+            item.target = self
+            item.toolTip = "Click to copy. Enter these in the Side Screen app on your tablet."
+            item.attributedTitle = NSAttributedString(
+                string: title,
+                attributes: [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)])
+            menu.addItem(item)
+        }
+        add(menu, android.isRunning ? "Stop Sharing to Android Tablet"
+                                    : "Share Screen to Android Tablet…",
+            #selector(toggleAndroidDisplay))
+
+        // Live throughput, so "it feels laggy" can be checked against numbers.
+        if let t = android.throughput {
+            let item = NSMenuItem(title: String(format: "  %.0f fps · %.1f Mbps", t.fps, t.mbps),
+                                  action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        }
+
+        let quality = NSMenu()
+        quality.autoenablesItems = false
+        for rate in [24, 30, 45, 60] {
+            let item = NSMenuItem(title: "\(rate) fps", action: #selector(pickFrameRate(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = rate
+            item.state = Prefs.androidFrameRate == rate ? .on : .off
+            quality.addItem(item)
+        }
+        quality.addItem(.separator())
+        for mbps in [8, 12, 20, 30] {
+            let item = NSMenuItem(title: "\(mbps) Mbps", action: #selector(pickBitrate(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = mbps
+            item.state = Prefs.androidBitrate == mbps ? .on : .off
+            quality.addItem(item)
+        }
+        // Sizes are the *logical* desktop. The tablet's panel is fixed, so a
+        // smaller desktop simply means everything on it is drawn bigger — which
+        // is what "the text is too small" actually needs, not a lower bitrate.
+        let sizes = NSMenu()
+        sizes.autoenablesItems = false
+        let presets: [(String, Int, Int)] = [
+            ("1920 × 1200  (smallest text)", 1920, 1200),
+            ("1680 × 1050", 1680, 1050),
+            ("1440 × 900", 1440, 900),
+            ("1280 × 800  (bigger text)", 1280, 800),
+            ("1024 × 640  (biggest text)", 1024, 640),
+        ]
+        for (label, w, h) in presets {
+            let item = NSMenuItem(title: label, action: #selector(pickResolution(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = [w, h]
+            item.state = (Prefs.androidWidth == w && Prefs.androidHeight == h) ? .on : .off
+            sizes.addItem(item)
+        }
+        sizes.addItem(.separator())
+        let crisp = NSMenuItem(title: "Sharper text (Retina)",
+                               action: #selector(toggleAndroidHiDPI), keyEquivalent: "")
+        crisp.target = self
+        crisp.state = Prefs.androidHiDPI ? .on : .off
+        crisp.toolTip = "Renders at double the size and scales down. Sharper, "
+            + "but four times the pixels for the tablet to decode."
+        sizes.addItem(crisp)
+        // Every screen macOS currently has — the iPad over Sidecar, an HDMI
+        // monitor and the Android tablet all live in the same coordinate space,
+        // so they can all be arranged from here.
+        let screens = DisplayArrangement.all()
+        let arrange = NSMenu()
+        arrange.autoenablesItems = false
+        for screen in screens {
+            if screen.isMain {
+                let item = NSMenuItem(title: screen.summary, action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                arrange.addItem(item)
+                continue
+            }
+            let sides = NSMenu()
+            sides.autoenablesItems = false
+            for anchor in screens where anchor.id != screen.id {
+                for side in DisplayArrangement.Side.allCases {
+                    let item = NSMenuItem(title: "\(side.label) \(anchor.name)",
+                                          action: #selector(moveDisplay(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = [
+                        "move": NSNumber(value: screen.id),
+                        "anchor": NSNumber(value: anchor.id),
+                        "side": side.rawValue,
+                    ] as [String: Any]
+                    sides.addItem(item)
+                }
+            }
+            let item = NSMenuItem(title: screen.summary, action: nil, keyEquivalent: "")
+            item.submenu = sides
+            arrange.addItem(item)
+        }
+        if screens.count < 2 {
+            let none = NSMenuItem(title: "Only one screen connected", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            arrange.addItem(none)
+        }
+        arrange.addItem(.separator())
+        let visual = NSMenuItem(title: "Arrange Visually…", action: #selector(showArrangementWindow),
+                                keyEquivalent: "")
+        visual.target = self
+        arrange.addItem(visual)
+        let arrangeItem = NSMenuItem(title: "Arrange Displays", action: nil, keyEquivalent: "")
+        arrangeItem.submenu = arrange
+        menu.addItem(arrangeItem)
+
+        let sizesItem = NSMenuItem(title: "Tablet Resolution", action: nil, keyEquivalent: "")
+        sizesItem.submenu = sizes
+        menu.addItem(sizesItem)
+
+        let qualityItem = NSMenuItem(title: "Tablet Quality", action: nil, keyEquivalent: "")
+        qualityItem.submenu = quality
+        menu.addItem(qualityItem)
+
+        menu.addItem(.separator())
+
         add(menu, "Reconnect Automatically After Wake",
             #selector(toggleAutoReconnect), state: Prefs.autoReconnectOnWake)
 
@@ -389,6 +525,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleAutoReconnect() { Prefs.autoReconnectOnWake.toggle() }
     @objc private func toggleCleanDisconnect() { Prefs.disconnectBeforeSleep.toggle() }
+
+    /// Quality changes only take effect on a fresh session — the virtual
+    /// display's refresh rate and the encoder are both fixed at start-up — so
+    /// restart one that's already running rather than silently doing nothing.
+    private func restartAndroidIfRunning() {
+        let android = AndroidDisplay.shared
+        guard android.isRunning else { return }
+        android.stop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { android.start() }
+        notify("Restarting the Android display with the new settings…")
+    }
+
+    @objc private func pickFrameRate(_ sender: NSMenuItem) {
+        guard let rate = sender.representedObject as? Int else { return }
+        Prefs.androidFrameRate = rate
+        restartAndroidIfRunning()
+    }
+
+    @objc private func pickBitrate(_ sender: NSMenuItem) {
+        guard let mbps = sender.representedObject as? Int else { return }
+        Prefs.androidBitrate = mbps
+        restartAndroidIfRunning()
+    }
+
+    @objc private func showArrangementWindow() {
+        ArrangementWindowController.present()
+    }
+
+    @objc private func moveDisplay(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let moving = (info["move"] as? NSNumber)?.uint32Value,
+              let anchor = (info["anchor"] as? NSNumber)?.uint32Value,
+              let raw = info["side"] as? String,
+              let side = DisplayArrangement.Side(rawValue: raw) else { return }
+        DisplayArrangement.place(moving, side, of: anchor)
+        // Remember it for the tablet specifically: macOS forgets a virtual
+        // display's place, so we reapply it whenever the session starts.
+        if moving == AndroidDisplay.shared.displayID,
+           let remembered = AndroidDisplay.Arrangement(rawValue: raw) {
+            Prefs.androidArrangement = remembered.rawValue
+        }
+    }
+
+    @objc private func pickResolution(_ sender: NSMenuItem) {
+        guard let wh = sender.representedObject as? [Int], wh.count == 2 else { return }
+        Prefs.androidWidth = wh[0]
+        Prefs.androidHeight = wh[1]
+        restartAndroidIfRunning()
+    }
+
+    @objc private func toggleAndroidHiDPI() {
+        Prefs.androidHiDPI.toggle()
+        restartAndroidIfRunning()
+    }
+
+    @objc private func copyPairingDetails() {
+        guard let pairing = AndroidDisplay.shared.pairing else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("\(pairing.address):\(pairing.port)", forType: .string)
+        notify("Copied \(pairing.address):\(pairing.port) — code \(PairingCode.display(pairing.code))")
+    }
+
+    @objc private func toggleAndroidDisplay() {
+        let android = AndroidDisplay.shared
+        if android.isRunning {
+            android.stop()
+        } else {
+            android.start()
+            // Starting is asynchronous and the first run usually trips a
+            // permission prompt, so tell the user where to watch.
+            notify("Starting the Android display — open the Side Screen app on your tablet.")
+        }
+    }
     @objc private func toggleNotify() { Prefs.notify.toggle() }
     @objc private func toggleUIFallback() { Prefs.uiFallback.toggle() }
 

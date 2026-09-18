@@ -21,18 +21,28 @@ die()  { printf '\033[31m==>\033[0m %s\n' "$*" >&2; exit 1; }
 command -v swiftc >/dev/null 2>&1 || die "swiftc not found — run: xcode-select --install"
 
 SHARED=("$HERE"/Sources/Shared/*.swift)
+# The Android second-display engine, vendored from Side Screen. App only — the
+# CLI has no use for a video pipeline and shouldn't carry one.
+VENDOR=("$HERE"/Sources/Vendor/*.swift "$HERE"/Sources/Vendor/SideScreen/*.swift)
+VENDOR_INC="$HERE/Sources/Vendor/SideScreen"
+# Our own code that drives the vendored engine. Also app-only.
+DISPLAY_SRC=("$HERE"/Sources/Display/*.swift)
+# The whole App directory, not just main.swift — adding a file beside it should
+# be picked up the way Sources/Shared already is.
+APP_SRC=("$HERE"/Sources/App/*.swift)
 
-# Build for the macOS this app claims to support, not the one it's built on.
-# Without this, swiftc targets the build machine's version: the prebuilt bundle
-# in this repo demanded macOS 26 while Info.plist promised 13, so it wouldn't
-# launch for most people who downloaded it.
+# Deployment target, not the host's version. Two reasons: the app claims macOS 13
+# in Info.plist and a binary built without this demands whatever the build
+# machine runs; and the vendored ScreenCapture.swift falls back to CGDisplayStream,
+# which the macOS 26 SDK marks unavailable above 13.
 TARGET="$(uname -m)-apple-macosx13.0"
 
 say "Building $APP_NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -framework AppKit -target "$TARGET" \
-    "${SHARED[@]}" "$HERE/Sources/App/main.swift" \
+    -I "$VENDOR_INC" -Xcc -fmodule-map-file="$VENDOR_INC/module.modulemap" \
+    "${SHARED[@]}" "${VENDOR[@]}" "${DISPLAY_SRC[@]}" "${APP_SRC[@]}" \
     -o "$APP/Contents/MacOS/$APP_NAME"
 cp "$HERE/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$HERE/scripts/sidecar-connect-ui.applescript" "$APP/Contents/Resources/"
@@ -43,10 +53,22 @@ cp "$HERE/scripts/sidecar-connect-ui.applescript" "$APP/Contents/Resources/"
 [[ -f "$HERE/Resources/AppIcon.icns" ]] \
     && cp "$HERE/Resources/AppIcon.icns" "$APP/Contents/Resources/"
 
-# Ad-hoc signature. Not a real identity, but macOS is markedly happier about
-# login items and permission grants for a signed bundle than an unsigned one.
-say "Signing (ad-hoc)"
-codesign --force --sign - --timestamp=none "$APP" 2>/dev/null \
+# Sign with a real identity when the machine has one. This matters more than it
+# looks: TCC keys Screen Recording and Accessibility grants to the signature, and
+# an ad-hoc signature changes on every build — so each rebuild would appear to
+# macOS as a different app and silently lose both permissions. A stable identity
+# means granting once. Override with SIGN_ID=... if you want a specific one.
+if [[ -z "${SIGN_ID:-}" ]]; then
+    SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null \
+        | awk '/Developer ID Application|Apple Development/ { print $2; exit }')"
+fi
+if [[ -n "${SIGN_ID:-}" ]]; then
+    say "Signing ($(security find-identity -v -p codesigning | grep "$SIGN_ID" | sed 's/.*"\(.*\)"/\1/'))"
+else
+    say "Signing (ad-hoc — permissions will need re-granting after each build)"
+    SIGN_ID="-"
+fi
+codesign --force --sign "$SIGN_ID" --timestamp=none "$APP" 2>/dev/null \
     || warn "codesign failed — the app still runs, but Open at Login may not stick"
 
 say "Building sidecarctl"
