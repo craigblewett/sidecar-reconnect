@@ -349,6 +349,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         crisp.toolTip = "Renders at double the size and scales down. Sharper, "
             + "but four times the pixels for the tablet to decode."
         sizes.addItem(crisp)
+        let arrange = NSMenu()
+        arrange.autoenablesItems = false
+        for option in AndroidDisplay.Arrangement.allCases {
+            let item = NSMenuItem(title: option.label, action: #selector(pickArrangement(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.rawValue
+            item.state = Prefs.androidArrangement == option.rawValue ? .on : .off
+            arrange.addItem(item)
+        }
+        let arrangeItem = NSMenuItem(title: "Tablet Position", action: nil, keyEquivalent: "")
+        arrangeItem.submenu = arrange
+        menu.addItem(arrangeItem)
+
         let sizesItem = NSMenuItem(title: "Tablet Resolution", action: nil, keyEquivalent: "")
         sizesItem.submenu = sizes
         menu.addItem(sizesItem)
@@ -519,6 +533,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let mbps = sender.representedObject as? Int else { return }
         Prefs.androidBitrate = mbps
         restartAndroidIfRunning()
+    }
+
+    @objc private func pickArrangement(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let option = AndroidDisplay.Arrangement(rawValue: raw) else { return }
+        // Takes effect immediately — no restart needed, unlike the size and
+        // frame rate, which are fixed when the display is created.
+        AndroidDisplay.shared.place(option)
     }
 
     @objc private func pickResolution(_ sender: NSMenuItem) {

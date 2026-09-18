@@ -28,6 +28,7 @@ public enum Prefs {
         static let androidUSB = "androidUSB"
         static let androidFrameRate = "androidFrameRate"
         static let androidWasSharing = "androidWasSharing"
+        static let androidArrangement = "androidArrangement"
     }
 
     static func registerDefaults() {
@@ -50,6 +51,7 @@ public enum Prefs {
             Key.androidTouch: true,
             Key.androidUSB: true,
             Key.androidFrameRate: 30,
+            Key.androidArrangement: "right",
         ])
     }
 
@@ -94,6 +96,14 @@ public enum Prefs {
     public static var androidWasSharing: Bool {
         get { defaults.bool(forKey: Key.androidWasSharing) }
         set { defaults.set(newValue, forKey: Key.androidWasSharing) }
+    }
+
+    /// Where the tablet sits relative to the main screen. Stored so the
+    /// arrangement survives restarts — macOS forgets a virtual display's place
+    /// the moment it goes away.
+    public static var androidArrangement: String {
+        get { defaults.string(forKey: Key.androidArrangement) ?? "right" }
+        set { defaults.set(newValue, forKey: Key.androidArrangement) }
     }
 
     public static var androidTouch: Bool {

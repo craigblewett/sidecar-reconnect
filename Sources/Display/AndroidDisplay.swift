@@ -164,6 +164,7 @@ public final class AndroidDisplay {
             throw Failure.displayNotRegistered
         }
         display = manager
+        place(Arrangement(rawValue: Prefs.androidArrangement) ?? .right)
 
         // 2. Capture it.
         let capture = try await ScreenCapture()
@@ -260,6 +261,45 @@ public final class AndroidDisplay {
         server = nil
         display = nil
         pairing = nil
+    }
+
+    // MARK: Arrangement
+
+    public enum Arrangement: String, CaseIterable {
+        case left, right, above, below
+
+        public var label: String {
+            switch self {
+            case .left:  return "Left of Main Screen"
+            case .right: return "Right of Main Screen"
+            case .above: return "Above Main Screen"
+            case .below: return "Below Main Screen"
+            }
+        }
+    }
+
+    /// Put the tablet where the user asked, relative to the main screen.
+    /// macOS treats a virtual display as new every time it appears, so this is
+    /// reapplied on every start rather than remembered by the system.
+    public func place(_ arrangement: Arrangement) {
+        Prefs.androidArrangement = arrangement.rawValue
+        guard let display = display, let id = display.displayID else { return }
+
+        let main = CGDisplayBounds(CGMainDisplayID())
+        let size = CGDisplayBounds(id).size
+        let origin: CGPoint
+        switch arrangement {
+        case .right: origin = CGPoint(x: main.maxX, y: main.minY)
+        case .left:  origin = CGPoint(x: main.minX - size.width, y: main.minY)
+        case .above: origin = CGPoint(x: main.minX, y: main.minY - size.height)
+        case .below: origin = CGPoint(x: main.minX, y: main.maxY)
+        }
+        do {
+            try display.setDisplayPosition(x: Int32(origin.x), y: Int32(origin.y))
+            Log.write("tablet placed \(arrangement.rawValue) of the main screen")
+        } catch {
+            Log.write("couldn't place the tablet: \(error.localizedDescription)")
+        }
     }
 
     // MARK: adb
