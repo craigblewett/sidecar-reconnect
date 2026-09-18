@@ -91,8 +91,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func willSleep(_ note: Notification) {
-        wasConnectedBeforeSleep = Sidecar.connectedDevice() != nil
+        let connected = Sidecar.connectedDevice()
+        wasConnectedBeforeSleep = connected != nil
         Log.write("sleeping (Sidecar was \(wasConnectedBeforeSleep ? "connected" : "idle"))")
+
+        // Close the session ourselves instead of letting sleep cut it off. An
+        // iPad found hung the next morning had been left mid-session — the relay
+        // logged "Terminated with Active Sessions" — and nothing on the Mac can
+        // clear that afterwards, so it's worth spending a moment here.
+        //
+        // macOS gives us only a short window before it suspends us, and this
+        // blocks the main thread, so the timeout is deliberately tight: better
+        // to skip the tidy-up than to hold up sleep.
+        guard Prefs.disconnectBeforeSleep, let device = connected else { return }
+        do {
+            try Sidecar.disconnect(device, timeout: 4)
+            Log.write("closed the session cleanly before sleeping")
+        } catch {
+            Log.write("couldn't close the session before sleeping: \(error.localizedDescription)")
+        }
     }
 
     @objc private func didWake(_ note: Notification) {
@@ -237,6 +254,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add(menu, "Reconnect Automatically After Wake",
             #selector(toggleAutoReconnect), state: Prefs.autoReconnectOnWake)
 
+        let sleepItem = NSMenuItem(title: "Disconnect Cleanly Before Sleep",
+                                   action: #selector(toggleCleanDisconnect), keyEquivalent: "")
+        sleepItem.target = self
+        sleepItem.state = Prefs.disconnectBeforeSleep ? .on : .off
+        sleepItem.toolTip = "Closes the session before the Mac sleeps, so the iPad "
+            + "isn't left holding one it can't clear."
+        menu.addItem(sleepItem)
+
         let connectionItem = NSMenuItem(title: "Connection", action: nil, keyEquivalent: "")
         let connectionMenu = NSMenu()
             connectionMenu.autoenablesItems = false
@@ -363,6 +388,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleAutoReconnect() { Prefs.autoReconnectOnWake.toggle() }
+    @objc private func toggleCleanDisconnect() { Prefs.disconnectBeforeSleep.toggle() }
     @objc private func toggleNotify() { Prefs.notify.toggle() }
     @objc private func toggleUIFallback() { Prefs.uiFallback.toggle() }
 

@@ -98,11 +98,20 @@ spun to drain the main queue the completions land on.
 Two distinct failures, told apart by the `SidecarErrorDomain` code, because they
 need opposite responses. Both observed on macOS 26.2 with a cabled iPad.
 
-**`-200` device not found — recoverable, Mac-side.** Seen in the first minute
-after a wake, while the device list is still settling. Connects fail, then start
-working. Rung 2 (session bounce) is what clears it in practice; in one measured
-run the ladder recovered 52s after wake, on the third attempt of rung 2. This is
-the case the ladder is for.
+**`-200` device not found — recoverable, Mac-side.** Seen after a wake when the
+session was torn down by sleep rather than closed. Connects fail repeatedly and
+then start working; rung 2 clears it, 52s and six failed attempts in a measured
+run.
+
+The cause is the teardown, not the wake. `Prefs.disconnectBeforeSleep` (on by
+default) closes the session in `willSleep` instead, and in the equivalent run
+afterwards the reconnect succeeded on rung 1's *first* attempt, immediately, with
+no failures and so no system alerts. Both runs are n=1, but the mechanism matches
+what the relay reports: a sleep-severed session leaves "Terminated with Active
+Sessions" behind, a closed one doesn't.
+
+The disconnect runs on the main thread inside the sleep window, so its timeout is
+4s — skipping the tidy-up is better than delaying sleep.
 
 **`-201` device timed out — not recoverable from the Mac.** The link is healthy:
 USB enumerates, IP over the cable pings, Bonjour resolves, Rapport pairs

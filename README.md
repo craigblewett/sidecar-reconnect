@@ -51,10 +51,16 @@ machine pays for the noisy steps:
 | 4 | Bounce Bluetooth | **off by default** — drops BT keyboards and mice |
 | 5 | Click through Control Center | **off by default** — needs Accessibility |
 
-Rung 2 is what actually recovers the ordinary post-wake case. For the first
-minute or so after a wake the device list hasn't settled and connects fail with
-"device not found"; disconnecting and retrying rides that out. In a measured run
-the ladder recovered 52 seconds after wake, on rung 2.
+Most of the time no rung should be needed at all. **Disconnect Cleanly Before
+Sleep** (on by default) closes the session when the Mac sleeps rather than
+letting sleep sever it, and that turns out to matter a lot: a severed session
+leaves the Mac unable to find the iPad for the best part of a minute afterwards.
+Measured over one sleep/wake each way — six failed attempts and 52 seconds to
+recover via rung 2 when the session was severed, versus reconnecting instantly on
+rung 1's first attempt when it was closed properly.
+
+When something does go wrong, rung 2 is what recovers the ordinary post-wake
+case.
 
 Rung 3 is close to decorative on a stock Mac: System Integrity Protection refuses
 `launchctl kickstart` for every agent it finds, so it reports what it couldn't do

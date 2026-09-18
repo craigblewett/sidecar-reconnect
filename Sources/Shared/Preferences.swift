@@ -12,6 +12,7 @@ public enum Prefs {
         static let device = "device"
         static let transport = "transport"
         static let autoReconnect = "autoReconnectOnWake"
+        static let cleanDisconnect = "disconnectBeforeSleep"
         static let wakeDelay = "wakeDelaySeconds"
         static let bounceBluetooth = "bounceBluetooth"
         static let uiFallback = "uiFallback"
@@ -23,6 +24,7 @@ public enum Prefs {
         defaults.register(defaults: [
             Key.transport: Transport.wired.rawValue,
             Key.autoReconnect: true,
+            Key.cleanDisconnect: true,
             Key.wakeDelay: 12.0,
             Key.bounceBluetooth: false,
             Key.uiFallback: false,
@@ -46,6 +48,15 @@ public enum Prefs {
     public static var autoReconnectOnWake: Bool {
         get { defaults.bool(forKey: Key.autoReconnect) }
         set { defaults.set(newValue, forKey: Key.autoReconnect) }
+    }
+
+    /// Close the session deliberately before the Mac sleeps, rather than letting
+    /// it be torn down mid-flight. A hung iPad receiver was observed after the
+    /// relay logged "Terminated with Active Sessions", so the theory is that the
+    /// iPad is left holding a session nobody ever closed.
+    public static var disconnectBeforeSleep: Bool {
+        get { defaults.bool(forKey: Key.cleanDisconnect) }
+        set { defaults.set(newValue, forKey: Key.cleanDisconnect) }
     }
 
     /// USB re-enumeration and Bluetooth take a few seconds to settle after a
