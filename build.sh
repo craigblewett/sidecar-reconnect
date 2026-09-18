@@ -50,10 +50,22 @@ cp "$HERE/scripts/sidecar-connect-ui.applescript" "$APP/Contents/Resources/"
 [[ -f "$HERE/Resources/AppIcon.icns" ]] \
     && cp "$HERE/Resources/AppIcon.icns" "$APP/Contents/Resources/"
 
-# Ad-hoc signature. Not a real identity, but macOS is markedly happier about
-# login items and permission grants for a signed bundle than an unsigned one.
-say "Signing (ad-hoc)"
-codesign --force --sign - --timestamp=none "$APP" 2>/dev/null \
+# Sign with a real identity when the machine has one. This matters more than it
+# looks: TCC keys Screen Recording and Accessibility grants to the signature, and
+# an ad-hoc signature changes on every build — so each rebuild would appear to
+# macOS as a different app and silently lose both permissions. A stable identity
+# means granting once. Override with SIGN_ID=... if you want a specific one.
+if [[ -z "${SIGN_ID:-}" ]]; then
+    SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null \
+        | awk '/Developer ID Application|Apple Development/ { print $2; exit }')"
+fi
+if [[ -n "${SIGN_ID:-}" ]]; then
+    say "Signing ($(security find-identity -v -p codesigning | grep "$SIGN_ID" | sed 's/.*"\(.*\)"/\1/'))"
+else
+    say "Signing (ad-hoc — permissions will need re-granting after each build)"
+    SIGN_ID="-"
+fi
+codesign --force --sign "$SIGN_ID" --timestamp=none "$APP" 2>/dev/null \
     || warn "codesign failed — the app still runs, but Open at Login may not stick"
 
 say "Building sidecarctl"
