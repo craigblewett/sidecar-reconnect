@@ -17,6 +17,12 @@ say()  { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31m==>\033[0m %s\n' "$*" >&2; exit 1; }
 
+# --build-only compiles and signs without installing or launching, which is what
+# a build machine wants and what you want when you don't intend to replace the
+# copy you're currently running.
+BUILD_ONLY=0
+[[ "${1:-}" == "--build-only" || -n "${CI:-}" ]] && BUILD_ONLY=1
+
 [[ "$(uname -s)" == "Darwin" ]] || die "this only makes sense on macOS"
 command -v swiftc >/dev/null 2>&1 || die "swiftc not found — run: xcode-select --install"
 
@@ -75,6 +81,13 @@ say "Building sidecarctl"
 mkdir -p "$BUILD_DIR"
 swiftc -O -target "$TARGET" "${SHARED[@]}" "$HERE/Sources/CLI/main.swift" \
     -o "$BUILD_DIR/sidecarctl"
+
+if [[ "$BUILD_ONLY" == "1" ]]; then
+    say "Built (not installed)"
+    echo "    $APP"
+    echo "    $BUILD_DIR/sidecarctl"
+    exit 0
+fi
 
 say "Installing"
 mkdir -p "$APP_DEST" "$CLI_DEST"

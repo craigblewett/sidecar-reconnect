@@ -168,21 +168,23 @@ cd sidecar-reconnect
 That builds the app, installs it to `~/Applications`, puts the `sidecarctl` CLI in
 `~/.local/bin`, and launches it. Then turn on **Open at Login** from the menu.
 
-Building from source is the path to prefer. A prebuilt `SidecarReconnect.app` is
-committed here for convenience, but it is **ad-hoc signed with no Team ID**, so a
-copy downloaded from GitHub arrives quarantined and macOS will refuse to open it.
-If you use it rather than building, clear the quarantine flag first:
+### Getting a build without building it
+
+Every push to `main` is built by CI, and a tagged commit becomes a release with
+`SidecarReconnect.zip` and `sidecarctl` attached. Nothing is committed to the
+repository, so there is no stale binary and nothing to resolve when branches
+merge.
+
+CI builds are **ad-hoc signed** — the signing certificate lives on a keychain,
+not in a repository — so a downloaded copy arrives quarantined:
 
 ```sh
 xattr -dr com.apple.quarantine SidecarReconnect.app
 ```
 
-It also only carries the `sidecarctl` CLI's sibling if you run `./build.sh`, and
-it goes stale whenever the sources move ahead of it — `./build.sh` is a few
-seconds and always matches the code you're looking at.
-
-If more than one device shows up, pick your iPad under the **iPad** submenu;
-with only one, it's chosen automatically.
+Building it yourself avoids that entirely: `build.sh` signs with whatever
+identity your keychain has, and a locally built app is never quarantined. It's
+also a few seconds, and always matches the code in front of you.
 
 ## The CLI
 
