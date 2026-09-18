@@ -62,6 +62,24 @@ enum DisplayArrangement {
         return "Display \(id)"
     }
 
+    /// Put `moving` at an absolute position — what dragging produces.
+    @discardableResult
+    static func move(_ moving: CGDirectDisplayID, to origin: CGPoint) -> Bool {
+        var config: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&config) == .success, let config = config else {
+            Log.write("couldn't begin a display configuration")
+            return false
+        }
+        guard CGConfigureDisplayOrigin(config, moving, Int32(origin.x), Int32(origin.y)) == .success,
+              CGCompleteDisplayConfiguration(config, .permanently) == .success else {
+            CGCancelDisplayConfiguration(config)
+            Log.write("couldn't move \(name(of: moving))")
+            return false
+        }
+        Log.write("moved \(name(of: moving)) to \(Int(origin.x)), \(Int(origin.y))")
+        return true
+    }
+
     /// Put `moving` on the given side of `anchor`. Both are looked up fresh,
     /// since bounds change as other displays move around.
     @discardableResult

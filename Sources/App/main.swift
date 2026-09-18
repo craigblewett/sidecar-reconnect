@@ -386,6 +386,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             none.isEnabled = false
             arrange.addItem(none)
         }
+        arrange.addItem(.separator())
+        let visual = NSMenuItem(title: "Arrange Visually…", action: #selector(showArrangementWindow),
+                                keyEquivalent: "")
+        visual.target = self
+        arrange.addItem(visual)
         let arrangeItem = NSMenuItem(title: "Arrange Displays", action: nil, keyEquivalent: "")
         arrangeItem.submenu = arrange
         menu.addItem(arrangeItem)
@@ -560,6 +565,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let mbps = sender.representedObject as? Int else { return }
         Prefs.androidBitrate = mbps
         restartAndroidIfRunning()
+    }
+
+    @objc private func showArrangementWindow() {
+        ArrangementWindowController.present()
     }
 
     @objc private func moveDisplay(_ sender: NSMenuItem) {
