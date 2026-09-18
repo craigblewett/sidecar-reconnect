@@ -53,10 +53,13 @@ public final class AndroidDisplay {
         public let code: String
         public let address: String
         public let port: UInt16
+        /// True when `address` is a cable rather than the WiFi network.
+        public let overCable: Bool
 
         /// One line, ready to put in a menu item.
         public var instruction: String {
             "Pair: \(address):\(port)   code \(PairingCode.display(code))"
+                + (overCable ? "   (over USB)" : "")
         }
     }
 
@@ -246,9 +249,15 @@ public final class AndroidDisplay {
     private func issuePairingCode(on server: StreamingServer) {
         let code = PairingCode.generate()
         server.expectedPairingCode = code
-        let address = LANAddressResolver.primaryIPv4() ?? "this Mac's IP address"
-        pairing = Pairing(code: code, address: address, port: Prefs.androidPort)
-        Log.write("pairing code ready — \(address):\(Prefs.androidPort) code \(PairingCode.display(code))")
+        let best = NetworkAddresses.preferred()
+        let address = best?.address ?? LANAddressResolver.primaryIPv4() ?? "this Mac's IP address"
+        pairing = Pairing(code: code, address: address, port: Prefs.androidPort,
+                          overCable: best?.isDirectLink ?? false)
+        if let best = best, best.isDirectLink {
+            Log.write("pairing over the cable (\(best.interface)) — \(address):\(Prefs.androidPort) code \(PairingCode.display(code))")
+        } else {
+            Log.write("pairing code ready — \(address):\(Prefs.androidPort) code \(PairingCode.display(code))")
+        }
         let current = state
         DispatchQueue.main.async { [weak self] in self?.onStateChange?(current) }
     }
