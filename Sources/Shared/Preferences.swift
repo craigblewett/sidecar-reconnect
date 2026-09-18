@@ -18,6 +18,14 @@ public enum Prefs {
         static let uiFallback = "uiFallback"
         static let notify = "notify"
         static let attempts = "attemptsPerRung"
+        // Android second display
+        static let androidPort = "androidPort"
+        static let androidWidth = "androidWidth"
+        static let androidHeight = "androidHeight"
+        static let androidHiDPI = "androidHiDPI"
+        static let androidBitrate = "androidBitrateMbps"
+        static let androidTouch = "androidTouch"
+        static let androidUSB = "androidUSB"
     }
 
     static func registerDefaults() {
@@ -30,7 +38,55 @@ public enum Prefs {
             Key.uiFallback: false,
             Key.notify: true,
             Key.attempts: 3,
+            // 54321 is what Side Screen's Android app offers by default, so
+            // their released APK pairs with us without being reconfigured.
+            Key.androidPort: 54321,
+            Key.androidWidth: 1920,
+            Key.androidHeight: 1200,
+            Key.androidHiDPI: true,
+            Key.androidBitrate: 20,
+            Key.androidTouch: true,
+            Key.androidUSB: true,
         ])
+    }
+
+    // MARK: Android second display
+
+    public static var androidPort: UInt16 {
+        get { UInt16(exactly: defaults.integer(forKey: Key.androidPort)) ?? 54321 }
+        set { defaults.set(Int(newValue), forKey: Key.androidPort) }
+    }
+
+    public static var androidWidth: Int {
+        get { max(640, defaults.integer(forKey: Key.androidWidth)) }
+        set { defaults.set(newValue, forKey: Key.androidWidth) }
+    }
+
+    public static var androidHeight: Int {
+        get { max(480, defaults.integer(forKey: Key.androidHeight)) }
+        set { defaults.set(newValue, forKey: Key.androidHeight) }
+    }
+
+    public static var androidHiDPI: Bool {
+        get { defaults.bool(forKey: Key.androidHiDPI) }
+        set { defaults.set(newValue, forKey: Key.androidHiDPI) }
+    }
+
+    public static var androidBitrate: Int {
+        get { max(1, defaults.integer(forKey: Key.androidBitrate)) }
+        set { defaults.set(newValue, forKey: Key.androidBitrate) }
+    }
+
+    public static var androidTouch: Bool {
+        get { defaults.bool(forKey: Key.androidTouch) }
+        set { defaults.set(newValue, forKey: Key.androidTouch) }
+    }
+
+    /// Whether to set up adb reverse forwarding for a cabled tablet. Harmless
+    /// when the tablet is wireless — it just finds no USB device and says so.
+    public static var androidUSB: Bool {
+        get { defaults.bool(forKey: Key.androidUSB) }
+        set { defaults.set(newValue, forKey: Key.androidUSB) }
     }
 
     /// Empty means "the only device that's visible", which is the common case

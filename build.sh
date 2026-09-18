@@ -25,6 +25,8 @@ SHARED=("$HERE"/Sources/Shared/*.swift)
 # CLI has no use for a video pipeline and shouldn't carry one.
 VENDOR=("$HERE"/Sources/Vendor/*.swift "$HERE"/Sources/Vendor/SideScreen/*.swift)
 VENDOR_INC="$HERE/Sources/Vendor/SideScreen"
+# Our own code that drives the vendored engine. Also app-only.
+DISPLAY_SRC=("$HERE"/Sources/Display/*.swift)
 
 # Deployment target, not the host's version. Two reasons: the app claims macOS 13
 # in Info.plist and a binary built without this demands whatever the build
@@ -37,7 +39,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -framework AppKit -target "$TARGET" \
     -I "$VENDOR_INC" -Xcc -fmodule-map-file="$VENDOR_INC/module.modulemap" \
-    "${SHARED[@]}" "${VENDOR[@]}" "$HERE/Sources/App/main.swift" \
+    "${SHARED[@]}" "${VENDOR[@]}" "${DISPLAY_SRC[@]}" "$HERE/Sources/App/main.swift" \
     -o "$APP/Contents/MacOS/$APP_NAME"
 cp "$HERE/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$HERE/scripts/sidecar-connect-ui.applescript" "$APP/Contents/Resources/"

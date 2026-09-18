@@ -69,6 +69,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             self?.refreshIcon()
         }
+        // A failed or finished Android session should show in the menu bar
+        // straight away, not at the next 20s poll.
+        AndroidDisplay.shared.onStateChange = { [weak self] state in
+            self?.refreshIcon()
+            if case .failed(let why) = state { self?.notify(why) }
+        }
+
         refreshIcon()
         Log.write("SidecarReconnect started")
     }
@@ -251,6 +258,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // Android tablet. A separate engine entirely — macOS gives us nothing
+        // here, so the app creates the display and streams it itself.
+        let android = AndroidDisplay.shared
+        let androidStatus = NSMenuItem(title: android.state.summary, action: nil, keyEquivalent: "")
+        androidStatus.isEnabled = false
+        menu.addItem(androidStatus)
+        add(menu, android.isRunning ? "Stop Sharing to Android Tablet"
+                                    : "Share Screen to Android Tablet…",
+            #selector(toggleAndroidDisplay))
+
+        menu.addItem(.separator())
+
         add(menu, "Reconnect Automatically After Wake",
             #selector(toggleAutoReconnect), state: Prefs.autoReconnectOnWake)
 
@@ -389,6 +408,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleAutoReconnect() { Prefs.autoReconnectOnWake.toggle() }
     @objc private func toggleCleanDisconnect() { Prefs.disconnectBeforeSleep.toggle() }
+
+    @objc private func toggleAndroidDisplay() {
+        let android = AndroidDisplay.shared
+        if android.isRunning {
+            android.stop()
+        } else {
+            android.start()
+            // Starting is asynchronous and the first run usually trips a
+            // permission prompt, so tell the user where to watch.
+            notify("Starting the Android display — open the Side Screen app on your tablet.")
+        }
+    }
     @objc private func toggleNotify() { Prefs.notify.toggle() }
     @objc private func toggleUIFallback() { Prefs.uiFallback.toggle() }
 
