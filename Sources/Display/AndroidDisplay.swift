@@ -62,6 +62,10 @@ public final class AndroidDisplay {
 
     public private(set) var pairing: Pairing?
 
+    /// Live figures from the engine, for the menu. Frames per second actually
+    /// delivered, and the bitrate they cost.
+    public private(set) var throughput: (fps: Double, mbps: Double)?
+
     /// Delivered on the main queue so the menu can update without hopping.
     public var onStateChange: ((State) -> Void)?
 
@@ -110,6 +114,7 @@ public final class AndroidDisplay {
         let width = Prefs.androidWidth
         let height = Prefs.androidHeight
         let port = Prefs.androidPort
+        let fps = Prefs.androidFrameRate
 
         // 0. Check this first. It's the most common reason a first run fails,
         //    and asking before creating a display avoids putting one up and
@@ -122,7 +127,7 @@ public final class AndroidDisplay {
         // 1. A display for the tablet to be. Nothing can be captured until this
         //    exists and macOS has registered it.
         let manager = VirtualDisplayManager()
-        try manager.createDisplay(width: width, height: height, refreshRate: 60,
+        try manager.createDisplay(width: width, height: height, refreshRate: fps,
                                   hiDPI: Prefs.androidHiDPI, name: "Android Tablet")
         guard let displayID = manager.displayID, manager.verifyDisplayRegistered() else {
             manager.destroyDisplay()
@@ -132,7 +137,7 @@ public final class AndroidDisplay {
 
         // 2. Capture it.
         let capture = try await ScreenCapture()
-        try await capture.setupForVirtualDisplay(displayID, refreshRate: 60)
+        try await capture.setupForVirtualDisplay(displayID, refreshRate: fps)
         self.capture = capture
 
         // 3. The server the tablet talks to.
@@ -153,6 +158,9 @@ public final class AndroidDisplay {
         server.onPairingCodeExhausted = { [weak self] in
             Log.write("too many wrong pairing codes — issuing a fresh one")
             self?.issuePairingCode(on: server)
+        }
+        server.onStats = { [weak self] fps, mbps in
+            self?.throughput = (fps, mbps)
         }
         server.onTouchEvent = { [weak self] x, y, action, pointers, x2, y2 in
             self?.touch.handle(x: x, y: y, action: action, pointerCount: pointers,
@@ -177,7 +185,7 @@ public final class AndroidDisplay {
 
         capture.startStreaming(to: server,
                                bitrateMbps: Prefs.androidBitrate,
-                               quality: "medium", gamingBoost: false, frameRate: 60)
+                               quality: "medium", gamingBoost: false, frameRate: fps)
         state = .waiting
     }
 

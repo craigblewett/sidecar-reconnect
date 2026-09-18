@@ -281,6 +281,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                     : "Share Screen to Android Tablet…",
             #selector(toggleAndroidDisplay))
 
+        // Live throughput, so "it feels laggy" can be checked against numbers.
+        if let t = android.throughput {
+            let item = NSMenuItem(title: String(format: "  %.0f fps · %.1f Mbps", t.fps, t.mbps),
+                                  action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        }
+
+        let quality = NSMenu()
+        quality.autoenablesItems = false
+        for rate in [24, 30, 45, 60] {
+            let item = NSMenuItem(title: "\(rate) fps", action: #selector(pickFrameRate(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = rate
+            item.state = Prefs.androidFrameRate == rate ? .on : .off
+            quality.addItem(item)
+        }
+        quality.addItem(.separator())
+        for mbps in [8, 12, 20, 30] {
+            let item = NSMenuItem(title: "\(mbps) Mbps", action: #selector(pickBitrate(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = mbps
+            item.state = Prefs.androidBitrate == mbps ? .on : .off
+            quality.addItem(item)
+        }
+        quality.addItem(.separator())
+        let hidpi = NSMenuItem(title: "Retina (doubles the pixels)",
+                               action: #selector(toggleAndroidHiDPI), keyEquivalent: "")
+        hidpi.target = self
+        hidpi.state = Prefs.androidHiDPI ? .on : .off
+        hidpi.toolTip = "Only worth it if the tablet's decoder can take more than its own resolution."
+        quality.addItem(hidpi)
+        let qualityItem = NSMenuItem(title: "Tablet Quality", action: nil, keyEquivalent: "")
+        qualityItem.submenu = quality
+        menu.addItem(qualityItem)
+
         menu.addItem(.separator())
 
         add(menu, "Reconnect Automatically After Wake",
@@ -421,6 +459,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleAutoReconnect() { Prefs.autoReconnectOnWake.toggle() }
     @objc private func toggleCleanDisconnect() { Prefs.disconnectBeforeSleep.toggle() }
+
+    /// Quality changes only take effect on a fresh session — the virtual
+    /// display's refresh rate and the encoder are both fixed at start-up — so
+    /// restart one that's already running rather than silently doing nothing.
+    private func restartAndroidIfRunning() {
+        let android = AndroidDisplay.shared
+        guard android.isRunning else { return }
+        android.stop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { android.start() }
+        notify("Restarting the Android display with the new settings…")
+    }
+
+    @objc private func pickFrameRate(_ sender: NSMenuItem) {
+        guard let rate = sender.representedObject as? Int else { return }
+        Prefs.androidFrameRate = rate
+        restartAndroidIfRunning()
+    }
+
+    @objc private func pickBitrate(_ sender: NSMenuItem) {
+        guard let mbps = sender.representedObject as? Int else { return }
+        Prefs.androidBitrate = mbps
+        restartAndroidIfRunning()
+    }
+
+    @objc private func toggleAndroidHiDPI() {
+        Prefs.androidHiDPI.toggle()
+        restartAndroidIfRunning()
+    }
 
     @objc private func copyPairingDetails() {
         guard let pairing = AndroidDisplay.shared.pairing else { return }

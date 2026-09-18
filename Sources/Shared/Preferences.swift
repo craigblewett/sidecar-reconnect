@@ -26,6 +26,7 @@ public enum Prefs {
         static let androidBitrate = "androidBitrateMbps"
         static let androidTouch = "androidTouch"
         static let androidUSB = "androidUSB"
+        static let androidFrameRate = "androidFrameRate"
     }
 
     static func registerDefaults() {
@@ -43,10 +44,11 @@ public enum Prefs {
             Key.androidPort: 54321,
             Key.androidWidth: 1920,
             Key.androidHeight: 1200,
-            Key.androidHiDPI: true,
+            Key.androidHiDPI: false,
             Key.androidBitrate: 20,
             Key.androidTouch: true,
             Key.androidUSB: true,
+            Key.androidFrameRate: 30,
         ])
     }
 
@@ -75,6 +77,13 @@ public enum Prefs {
     public static var androidBitrate: Int {
         get { max(1, defaults.integer(forKey: Key.androidBitrate)) }
         set { defaults.set(newValue, forKey: Key.androidBitrate) }
+    }
+
+    /// A steady 30 looks smoother than an unstable 50 on a modest tablet
+    /// decoder, which is what the pipeline stats showed on a Kirin 710A.
+    public static var androidFrameRate: Int {
+        get { min(60, max(15, defaults.integer(forKey: Key.androidFrameRate))) }
+        set { defaults.set(newValue, forKey: Key.androidFrameRate) }
     }
 
     public static var androidTouch: Bool {
