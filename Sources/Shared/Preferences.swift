@@ -27,6 +27,7 @@ public enum Prefs {
         static let androidTouch = "androidTouch"
         static let androidUSB = "androidUSB"
         static let androidFrameRate = "androidFrameRate"
+        static let androidWasSharing = "androidWasSharing"
     }
 
     static func registerDefaults() {
@@ -84,6 +85,15 @@ public enum Prefs {
     public static var androidFrameRate: Int {
         get { min(60, max(15, defaults.integer(forKey: Key.androidFrameRate))) }
         set { defaults.set(newValue, forKey: Key.androidFrameRate) }
+    }
+
+    /// Whether sharing was active when we last shut down. Rebuilding the app
+    /// relaunches it, and having the tablet's display silently not come back —
+    /// while the tablet sits there reporting it can't reach the Mac — is a
+    /// worse failure than restoring something the user has finished with.
+    public static var androidWasSharing: Bool {
+        get { defaults.bool(forKey: Key.androidWasSharing) }
+        set { defaults.set(newValue, forKey: Key.androidWasSharing) }
     }
 
     public static var androidTouch: Bool {

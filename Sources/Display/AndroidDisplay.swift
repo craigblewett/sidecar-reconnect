@@ -98,6 +98,7 @@ public final class AndroidDisplay {
 
     public func start() {
         guard !isRunning else { return }
+        Prefs.androidWasSharing = true
         state = .starting
         Task { [weak self] in
             guard let self = self else { return }
@@ -112,9 +113,21 @@ public final class AndroidDisplay {
     }
 
     public func stop() {
+        Prefs.androidWasSharing = false
         guard isRunning else { return }
         tearDown()
         state = .stopped
+    }
+
+    /// Bring sharing back after a relaunch if it was on when we quit. Delayed a
+    /// little: the display server and network aren't necessarily ready the
+    /// instant a login item starts.
+    public func restoreIfWasSharing() {
+        guard Prefs.androidWasSharing, !isRunning else { return }
+        Log.write("restoring the Android display — it was sharing when we last quit")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.start()
+        }
     }
 
     // MARK: Bring-up

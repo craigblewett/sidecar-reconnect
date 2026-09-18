@@ -76,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if case .failed(let why) = state { self?.notify(why) }
         }
 
+        AndroidDisplay.shared.restoreIfWasSharing()
+
         refreshIcon()
         Log.write("SidecarReconnect started")
     }
