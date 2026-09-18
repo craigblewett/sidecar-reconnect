@@ -194,6 +194,24 @@ public final class AndroidDisplay {
         server.onStats = { [weak self] fps, mbps in
             self?.throughput = (fps, mbps)
         }
+        // Honour the codec the tablet asks for. Without this the tablet can
+        // request H.264 - often the cheaper decode on an older chip - and get
+        // H.265 regardless, because ScreenCapture doesn't wire this itself.
+        server.onCodecNegotiated = { [weak self, weak server] codec in
+            guard let capture = self?.capture, let server = server else { return }
+            capture.negotiate(codec: codec, clientLimit: server.clientDecodeLimits)
+            let encoded = capture.encodeSize(for: codec)
+            server.setDesktopSize(width: width, height: height)
+            server.setDisplaySize(width: encoded.width, height: encoded.height,
+                                  rotation: 0, flipHorizontal: false, flipVertical: false)
+            Log.write("codec negotiated: \(codec), encoding at \(encoded.width)x\(encoded.height)")
+        }
+        // A client that has lost sync asks for a fresh keyframe; ignoring it
+        // leaves the tablet showing a frozen or smeared picture until the next
+        // periodic one.
+        server.onKeyframeRequested = { [weak self] force in
+            self?.capture?.requestKeyframeOrReplayCachedFrame(force: force)
+        }
         server.onTouchEvent = { [weak self] x, y, action, pointers, x2, y2 in
             self?.touch.handle(x: x, y: y, action: action, pointerCount: pointers,
                                x2: x2, y2: y2, on: displayID)
