@@ -322,13 +322,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.state = Prefs.androidBitrate == mbps ? .on : .off
             quality.addItem(item)
         }
-        quality.addItem(.separator())
-        let hidpi = NSMenuItem(title: "Retina (doubles the pixels)",
+        // Sizes are the *logical* desktop. The tablet's panel is fixed, so a
+        // smaller desktop simply means everything on it is drawn bigger — which
+        // is what "the text is too small" actually needs, not a lower bitrate.
+        let sizes = NSMenu()
+        sizes.autoenablesItems = false
+        let presets: [(String, Int, Int)] = [
+            ("1920 × 1200  (smallest text)", 1920, 1200),
+            ("1680 × 1050", 1680, 1050),
+            ("1440 × 900", 1440, 900),
+            ("1280 × 800  (bigger text)", 1280, 800),
+            ("1024 × 640  (biggest text)", 1024, 640),
+        ]
+        for (label, w, h) in presets {
+            let item = NSMenuItem(title: label, action: #selector(pickResolution(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = [w, h]
+            item.state = (Prefs.androidWidth == w && Prefs.androidHeight == h) ? .on : .off
+            sizes.addItem(item)
+        }
+        sizes.addItem(.separator())
+        let crisp = NSMenuItem(title: "Sharper text (Retina)",
                                action: #selector(toggleAndroidHiDPI), keyEquivalent: "")
-        hidpi.target = self
-        hidpi.state = Prefs.androidHiDPI ? .on : .off
-        hidpi.toolTip = "Only worth it if the tablet's decoder can take more than its own resolution."
-        quality.addItem(hidpi)
+        crisp.target = self
+        crisp.state = Prefs.androidHiDPI ? .on : .off
+        crisp.toolTip = "Renders at double the size and scales down. Sharper, "
+            + "but four times the pixels for the tablet to decode."
+        sizes.addItem(crisp)
+        let sizesItem = NSMenuItem(title: "Tablet Resolution", action: nil, keyEquivalent: "")
+        sizesItem.submenu = sizes
+        menu.addItem(sizesItem)
+
         let qualityItem = NSMenuItem(title: "Tablet Quality", action: nil, keyEquivalent: "")
         qualityItem.submenu = quality
         menu.addItem(qualityItem)
@@ -494,6 +518,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func pickBitrate(_ sender: NSMenuItem) {
         guard let mbps = sender.representedObject as? Int else { return }
         Prefs.androidBitrate = mbps
+        restartAndroidIfRunning()
+    }
+
+    @objc private func pickResolution(_ sender: NSMenuItem) {
+        guard let wh = sender.representedObject as? [Int], wh.count == 2 else { return }
+        Prefs.androidWidth = wh[0]
+        Prefs.androidHeight = wh[1]
         restartAndroidIfRunning()
     }
 
