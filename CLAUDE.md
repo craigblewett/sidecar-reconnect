@@ -1,8 +1,18 @@
 # SidecarReconnect
 
-A macOS menu bar app that recovers a wedged Sidecar connection to an iPad —
-typically after the Mac wakes and the iPad, still on its USB-C cable, won't
-re-establish mirroring.
+A macOS menu bar app with two halves that share a menu, a log and nothing else.
+
+**Sidecar** — recovers a wedged connection to an iPad, typically after the Mac
+wakes and the iPad, still on its USB-C cable, won't re-establish mirroring. macOS
+does all the work here; the app only asks `SidecarCore` to connect.
+
+**Android second display** — macOS offers no equivalent, so the app builds the
+whole chain: virtual display, capture, encode, socket, and touch injected back.
+The engine is vendored from Side Screen (MIT); `Sources/Display/` is our code
+driving it.
+
+The two share no machinery, and that's expected: for the iPad the system is the
+implementation, for the tablet we are.
 
 ## Build and run
 
@@ -13,13 +23,25 @@ re-establish mirroring.
 
 Requires macOS 13+ and Xcode Command Line Tools. There is no Xcode project and no
 SwiftPM manifest — `build.sh` calls `swiftc` directly on the source files. Adding
-a file to `Sources/Shared/` picks it up automatically (it globs); adding a new
-target does not.
+a file to `Sources/Shared/`, `Sources/App/`, `Sources/Display/` or
+`Sources/Vendor/` picks it up automatically (they glob); adding a new target does
+not.
+
+Two build details that are not optional:
+
+- `-target <arch>-apple-macosx13.0`. Without it swiftc targets the *build*
+  machine, so a binary built on macOS 26 refuses to launch on 13 despite what
+  Info.plist promises. The vendored `ScreenCapture.swift` also needs it: its
+  `CGDisplayStream` fallback is unavailable above a 13.0 target in the macOS 26
+  SDK.
+- A real signing identity when the keychain has one. TCC keys Screen Recording
+  and Accessibility to the signature, and an ad-hoc signature is just the
+  cdhash — which changes every build, so each rebuild loses both permissions.
 
 Two binaries are compiled from one set of sources:
 
-- `Sources/Shared/*.swift` + `Sources/App/main.swift` → `SidecarReconnect.app`
-- `Sources/Shared/*.swift` + `Sources/CLI/main.swift` → `sidecarctl`
+- `Sources/Shared` + `Sources/Vendor` + `Sources/Display` + `Sources/App` → `SidecarReconnect.app`
+- `Sources/Shared` + `Sources/CLI/main.swift` → `sidecarctl`
 
 Both files are named `main.swift` deliberately — top-level code needs that name,
 and they're compiled in separate `swiftc` invocations so they never collide.
@@ -33,8 +55,19 @@ and they're compiled in separate `swiftc` invocations so they never collide.
 | `Sources/Shared/Preferences.swift` | UserDefaults in a suite shared by app and CLI. |
 | `Sources/Shared/Log.swift` | File log + in-memory tail for the menu. |
 | `Sources/App/main.swift` | NSStatusItem menu bar app, wake observers, menu construction. |
-| `Sources/CLI/main.swift` | `sidecarctl`, same engine for hotkeys and scripts. |
+| `Sources/App/MenuBarIcon.swift` | The status item glyph, drawn rather than an SF Symbol. |
+| `Sources/CLI/main.swift` | `sidecarctl`, same engine for hotkeys and scripts. Sidecar only. |
+| `Sources/Display/AndroidDisplay.swift` | Orchestrates the vendored engine: display → capture → encode → serve. |
+| `Sources/Display/TouchInjector.swift` | Tablet touches → `CGEvent`s. One finger only. |
+| `Sources/Display/DisplayArrangement.swift` | Reads and sets where every screen sits. |
+| `Sources/Display/ArrangementWindow.swift` | The drag-to-arrange window. |
+| `Sources/Display/NetworkAddresses.swift` | Which address a tablet should dial, cable preferred. |
+| `Sources/Vendor/SideScreen/` | Side Screen's streaming engine, verbatim. See its README. |
+| `scripts/make-icon.swift` | Generates `Resources/AppIcon.icns`. |
 | `scripts/*.applescript` | Control Center fallback, bundled into the app's Resources. |
+
+`Sources/Display` and `Sources/Vendor` are compiled into the app only. The CLI
+has no use for a video pipeline and shouldn't carry one.
 
 ## The private API
 
