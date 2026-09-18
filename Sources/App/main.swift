@@ -10,28 +10,10 @@ import UserNotifications
 
 // MARK: - Menu bar icon
 
-/// SF Symbol names move between releases, so try a few and fall back to text
-/// rather than showing an empty menu bar slot.
-private func symbol(_ names: [String], description: String) -> NSImage? {
-    for name in names {
-        if let image = NSImage(systemSymbolName: name, accessibilityDescription: description) {
-            image.isTemplate = true   // so it follows light/dark menu bars
-            return image
-        }
-    }
-    return nil
-}
-
 private enum Icon {
-    static let connected = symbol(
-        ["rectangle.on.rectangle.fill", "rectangle.on.rectangle", "display"],
-        description: "Sidecar connected")
-    static let disconnected = symbol(
-        ["rectangle.on.rectangle.slash", "rectangle.on.rectangle", "display"],
-        description: "Sidecar disconnected")
-    static let working = symbol(
-        ["arrow.triangle.2.circlepath", "rectangle.on.rectangle"],
-        description: "Reconnecting")
+    static let connected = MenuBarIcon.connected
+    static let disconnected = MenuBarIcon.disconnected
+    static let working = MenuBarIcon.working
 }
 
 // MARK: - App

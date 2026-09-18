@@ -54,39 +54,38 @@ private func draw(size pixels: Int) -> Data {
                           options: [])
     cg.restoreGState()
 
-    // The two screens, drawn in one transparency layer so the gap between them
-    // can be punched out without erasing the gradient underneath.
-    let stroke = 38 * u
-    let gap = 30 * u
-    let back = CGRect(x: 250 * u, y: 430 * u, width: 400 * u, height: 300 * u)
-    let front = CGRect(x: 392 * u, y: 286 * u, width: 400 * u, height: 300 * u)
-    let radius = 52 * u
-
-    cg.beginTransparencyLayer(auxiliaryInfo: nil)
-
+    // A screen with a reconnect arrow curling over its shoulder — the same
+    // motif as the menu bar glyph in Sources/App/MenuBarIcon.swift, and
+    // deliberately *not* two overlapping rectangles, which is what macOS itself
+    // uses for Screen Mirroring. Two near-identical icons side by side in the
+    // menu bar helps nobody.
+    cg.setFillColor(NSColor.white.cgColor)
     cg.setStrokeColor(NSColor.white.cgColor)
-    cg.setLineWidth(stroke)
-    cg.addPath(CGPath(roundedRect: back.insetBy(dx: stroke / 2, dy: stroke / 2),
-                      cornerWidth: radius - stroke / 2,
-                      cornerHeight: radius - stroke / 2, transform: nil))
+
+    // The screen.
+    let screen = CGRect(x: 238 * u, y: 289 * u, width: 428 * u, height: 321 * u)
+    cg.addPath(CGPath(roundedRect: screen, cornerWidth: 54 * u,
+                      cornerHeight: 54 * u, transform: nil))
+    cg.fillPath()
+
+    // Its stand, so it reads as a display rather than a card.
+    cg.setLineWidth(54 * u)
+    cg.setLineCap(.round)
+    cg.move(to: CGPoint(x: 380 * u, y: 253 * u))
+    cg.addLine(to: CGPoint(x: 523 * u, y: 253 * u))
     cg.strokePath()
 
-    // Clear a margin around the front screen so the two shapes stay legible
-    // where they overlap, exactly as the SF Symbol does.
-    cg.setBlendMode(.destinationOut)
-    cg.setFillColor(NSColor.black.cgColor)
-    cg.addPath(CGPath(roundedRect: front.insetBy(dx: -gap, dy: -gap),
-                      cornerWidth: radius + gap, cornerHeight: radius + gap,
-                      transform: nil))
-    cg.fillPath()
+    // The arrow: an arc over the top-right, with a solid head.
+    cg.setLineWidth(61 * u)
+    cg.addArc(center: CGPoint(x: 630 * u, y: 592 * u), radius: 150 * u,
+              startAngle: 200 * .pi / 180, endAngle: 20 * .pi / 180, clockwise: true)
+    cg.strokePath()
 
-    cg.setBlendMode(.normal)
-    cg.setFillColor(NSColor.white.cgColor)
-    cg.addPath(CGPath(roundedRect: front, cornerWidth: radius,
-                      cornerHeight: radius, transform: nil))
+    cg.move(to: CGPoint(x: 787 * u, y: 664 * u))
+    cg.addLine(to: CGPoint(x: 759 * u, y: 535 * u))
+    cg.addLine(to: CGPoint(x: 670 * u, y: 614 * u))
+    cg.closePath()
     cg.fillPath()
-
-    cg.endTransparencyLayer()
 
     NSGraphicsContext.restoreGraphicsState()
 
