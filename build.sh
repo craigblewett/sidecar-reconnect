@@ -22,10 +22,16 @@ command -v swiftc >/dev/null 2>&1 || die "swiftc not found — run: xcode-select
 
 SHARED=("$HERE"/Sources/Shared/*.swift)
 
+# Build for the macOS this app claims to support, not the one it's built on.
+# Without this, swiftc targets the build machine's version: the prebuilt bundle
+# in this repo demanded macOS 26 while Info.plist promised 13, so it wouldn't
+# launch for most people who downloaded it.
+TARGET="$(uname -m)-apple-macosx13.0"
+
 say "Building $APP_NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-swiftc -O -framework AppKit \
+swiftc -O -framework AppKit -target "$TARGET" \
     "${SHARED[@]}" "$HERE/Sources/App/main.swift" \
     -o "$APP/Contents/MacOS/$APP_NAME"
 cp "$HERE/Resources/Info.plist" "$APP/Contents/Info.plist"
@@ -45,7 +51,8 @@ codesign --force --sign - --timestamp=none "$APP" 2>/dev/null \
 
 say "Building sidecarctl"
 mkdir -p "$BUILD_DIR"
-swiftc -O "${SHARED[@]}" "$HERE/Sources/CLI/main.swift" -o "$BUILD_DIR/sidecarctl"
+swiftc -O -target "$TARGET" "${SHARED[@]}" "$HERE/Sources/CLI/main.swift" \
+    -o "$BUILD_DIR/sidecarctl"
 
 say "Installing"
 mkdir -p "$APP_DEST" "$CLI_DEST"
