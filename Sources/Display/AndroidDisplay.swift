@@ -63,6 +63,10 @@ public final class AndroidDisplay {
         }
     }
 
+    /// The virtual display's ID while a session is up, so the arrangement menu
+    /// can tell which screen is the tablet.
+    public var displayID: CGDirectDisplayID? { display?.displayID }
+
     public private(set) var pairing: Pairing?
 
     /// Tablets that have paired before. They hold a token and reconnect without

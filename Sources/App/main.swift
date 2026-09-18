@@ -349,17 +349,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         crisp.toolTip = "Renders at double the size and scales down. Sharper, "
             + "but four times the pixels for the tablet to decode."
         sizes.addItem(crisp)
+        // Every screen macOS currently has — the iPad over Sidecar, an HDMI
+        // monitor and the Android tablet all live in the same coordinate space,
+        // so they can all be arranged from here.
+        let screens = DisplayArrangement.all()
         let arrange = NSMenu()
         arrange.autoenablesItems = false
-        for option in AndroidDisplay.Arrangement.allCases {
-            let item = NSMenuItem(title: option.label, action: #selector(pickArrangement(_:)),
-                                  keyEquivalent: "")
-            item.target = self
-            item.representedObject = option.rawValue
-            item.state = Prefs.androidArrangement == option.rawValue ? .on : .off
+        for screen in screens {
+            if screen.isMain {
+                let item = NSMenuItem(title: screen.summary, action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                arrange.addItem(item)
+                continue
+            }
+            let sides = NSMenu()
+            sides.autoenablesItems = false
+            for anchor in screens where anchor.id != screen.id {
+                for side in DisplayArrangement.Side.allCases {
+                    let item = NSMenuItem(title: "\(side.label) \(anchor.name)",
+                                          action: #selector(moveDisplay(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = [
+                        "move": NSNumber(value: screen.id),
+                        "anchor": NSNumber(value: anchor.id),
+                        "side": side.rawValue,
+                    ] as [String: Any]
+                    sides.addItem(item)
+                }
+            }
+            let item = NSMenuItem(title: screen.summary, action: nil, keyEquivalent: "")
+            item.submenu = sides
             arrange.addItem(item)
         }
-        let arrangeItem = NSMenuItem(title: "Tablet Position", action: nil, keyEquivalent: "")
+        if screens.count < 2 {
+            let none = NSMenuItem(title: "Only one screen connected", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            arrange.addItem(none)
+        }
+        let arrangeItem = NSMenuItem(title: "Arrange Displays", action: nil, keyEquivalent: "")
         arrangeItem.submenu = arrange
         menu.addItem(arrangeItem)
 
@@ -535,12 +562,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         restartAndroidIfRunning()
     }
 
-    @objc private func pickArrangement(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let option = AndroidDisplay.Arrangement(rawValue: raw) else { return }
-        // Takes effect immediately — no restart needed, unlike the size and
-        // frame rate, which are fixed when the display is created.
-        AndroidDisplay.shared.place(option)
+    @objc private func moveDisplay(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let moving = (info["move"] as? NSNumber)?.uint32Value,
+              let anchor = (info["anchor"] as? NSNumber)?.uint32Value,
+              let raw = info["side"] as? String,
+              let side = DisplayArrangement.Side(rawValue: raw) else { return }
+        DisplayArrangement.place(moving, side, of: anchor)
+        // Remember it for the tablet specifically: macOS forgets a virtual
+        // display's place, so we reapply it whenever the session starts.
+        if moving == AndroidDisplay.shared.displayID,
+           let remembered = AndroidDisplay.Arrangement(rawValue: raw) {
+            Prefs.androidArrangement = remembered.rawValue
+        }
     }
 
     @objc private func pickResolution(_ sender: NSMenuItem) {
