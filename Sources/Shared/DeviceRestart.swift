@@ -52,6 +52,30 @@ public enum DeviceRestart {
         }
     }
 
+    public struct LockState {
+        /// The iPad is sitting at the lock screen wanting a passcode.
+        public let passcodeRequired: Bool
+        /// False after a restart until someone types the passcode. Face ID
+        /// doesn't count — iOS insists on the passcode for the first unlock.
+        public let unlockedSinceBoot: Bool
+
+        /// Sidecar needs an unlocked iPad, so this is what decides whether it's
+        /// worth trying to connect yet.
+        public var readyForSidecar: Bool { unlockedSinceBoot && !passcodeRequired }
+    }
+
+    /// Whether the iPad is unlocked. There is no way to unlock it from here and
+    /// there shouldn't be — but knowing turns "it timed out" into "unlock your
+    /// iPad", which is the difference between a dead end and an instruction.
+    public static func lockState(_ device: String) -> LockState? {
+        guard let tool = toolPath() else { return nil }
+        let result = shell(tool, ["device", "info", "lockState", "--device", device], timeout: 30)
+        guard result.output.contains("unlockedSinceBoot") else { return nil }
+        return LockState(
+            passcodeRequired: result.output.contains("passcodeRequired: true"),
+            unlockedSinceBoot: result.output.contains("unlockedSinceBoot: true"))
+    }
+
     /// iOS 16 and later refuse device management unless Developer Mode is on.
     /// Checked up front so the menu can explain itself rather than failing at
     /// the moment someone asks for a restart.

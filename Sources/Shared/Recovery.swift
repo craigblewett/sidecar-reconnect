@@ -217,16 +217,34 @@ public final class Recovery {
         do {
             let style = try DeviceRestart.restart(device.name, progress: step)
             step("waiting for \(device.name) to come back")
-            // A userspace restart is back in well under a minute; a full reboot
-            // needs longer. Poll rather than guess.
-            let deadline = Date().addingTimeInterval(style == .userspace ? 90 : 150)
+
+            // Sidecar needs an unlocked iPad, and iOS wants the passcode after a
+            // restart — Face ID won't do for the first unlock. There is no way
+            // to supply it from here, so the most useful thing is to notice and
+            // say so rather than retrying into a locked screen until the clock
+            // runs out. A userspace restart is back in seconds; a full reboot,
+            // and any wait for a human to type a passcode, needs much longer.
+            let deadline = Date().addingTimeInterval(style == .userspace ? 90 : 180)
+            var askedToUnlock = false
+
             while Date() < deadline {
                 Thread.sleep(forTimeInterval: 5)
+
+                if let lock = DeviceRestart.lockState(device.name), !lock.readyForSidecar {
+                    if !askedToUnlock {
+                        askedToUnlock = true
+                        step("\(device.name) is back — unlock it and this will finish")
+                    }
+                    continue      // no point attempting a connect into a lock screen
+                }
+
                 if !Sidecar.devices().isEmpty, tryConnect("after restart") {
                     return .connected(rung: "iPad restart")
                 }
             }
-            step("\(device.name) didn't come back in time")
+            step(askedToUnlock
+                 ? "\(device.name) restarted but is still locked — unlock it, then reconnect"
+                 : "\(device.name) didn't come back in time")
         } catch {
             step(error.localizedDescription)
         }
