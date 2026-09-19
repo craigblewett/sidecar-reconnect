@@ -29,6 +29,7 @@ public enum DeviceRestart {
     public enum Failure: LocalizedError {
         case toolMissing
         case deviceNotPaired(String)
+        case developerModeDisabled(String)
         case commandFailed(String)
 
         public var errorDescription: String? {
@@ -39,10 +40,26 @@ public enum DeviceRestart {
             case .deviceNotPaired(let name):
                 return "“\(name)” isn't paired with this Mac for development. "
                      + "Connect it by cable and trust this computer, then try again."
+            case .developerModeDisabled(let name):
+                // The raw error is a CoreDeviceError number, which tells nobody
+                // anything. This is a one-time setting on the iPad.
+                return "Developer Mode is off on “\(name)”, and macOS can't restart "
+                     + "it without that. Turn it on once: Settings › Privacy & Security › "
+                     + "Developer Mode. The iPad restarts when you enable it."
             case .commandFailed(let detail):
                 return "Couldn't restart the iPad: \(detail)"
             }
         }
+    }
+
+    /// iOS 16 and later refuse device management unless Developer Mode is on.
+    /// Checked up front so the menu can explain itself rather than failing at
+    /// the moment someone asks for a restart.
+    public static func developerModeEnabled(_ device: String) -> Bool? {
+        guard let tool = toolPath() else { return nil }
+        let result = shell(tool, ["device", "info", "details", "--device", device], timeout: 30)
+        guard result.output.contains("developerModeStatus") else { return nil }
+        return result.output.contains("developerModeStatus: enabled")
     }
 
     /// `devicectl` lives inside Xcode, not the Command Line Tools, so it's
@@ -99,6 +116,11 @@ public enum DeviceRestart {
                 return style
             }
             lastDetail = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            // No point trying the other style: both go through the same device
+            // management path, and neither works with Developer Mode off.
+            if lastDetail.contains("Developer Mode is disabled") {
+                throw Failure.developerModeDisabled(device)
+            }
             Log.write("\(style.rawValue) restart of \(device) failed: \(lastDetail)")
         }
         throw Failure.commandFailed(lastDetail)
