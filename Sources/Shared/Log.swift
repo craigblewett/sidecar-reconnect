@@ -42,13 +42,16 @@ public enum Log {
     }
 
     /// Keeps the file from growing without bound over months of daily wakes.
+    /// 4000 lines rather than 1000: two subsystems share this file now, and a
+    /// night's worth of Sidecar history is what makes a morning failure
+    /// diagnosable.
     public static func trimIfLarge(maxBytes: Int = 512_000) {
         queue.async {
             guard let size = try? FileManager.default
                 .attributesOfItem(atPath: fileURL.path)[.size] as? Int,
                 size > maxBytes,
                 let text = try? String(contentsOf: fileURL, encoding: .utf8) else { return }
-            let kept = text.split(separator: "\n").suffix(1000).joined(separator: "\n")
+            let kept = text.split(separator: "\n").suffix(4000).joined(separator: "\n")
             try? (kept + "\n").write(to: fileURL, atomically: true, encoding: .utf8)
         }
     }
