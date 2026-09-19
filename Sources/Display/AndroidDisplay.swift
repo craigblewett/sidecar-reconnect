@@ -225,11 +225,25 @@ public final class AndroidDisplay {
                                x2: x2, y2: y2, on: displayID)
         }
         server.onClientConnected = { [weak self] in
-            self?.pairing = nil          // paired and connected; stop advertising a code
-            self?.state = .streaming
+            guard let self = self else { return }
+            self.pairing = nil           // paired and connected; stop advertising a code
+            // Start capturing only now. The engine takes a
+            // PreventUserIdleDisplaySleep assertion for as long as it is
+            // streaming — correct while a tablet is watching, since a sleeping
+            // display stops feeding the virtual one, but it also means a Mac
+            // that is merely *waiting* for a tablet never sleeps. Left running
+            // from login, that keeps a laptop awake all night.
+            self.capture?.startStreaming(to: server,
+                                         bitrateMbps: Prefs.androidBitrate,
+                                         quality: "medium", gamingBoost: false,
+                                         frameRate: fps)
+            self.state = .streaming
         }
         server.onClientDisconnected = { [weak self] in
             guard let self = self, self.isRunning else { return }
+            // Releases the assertion and stops encoding frames nobody is
+            // watching. The server keeps listening, so the tablet can come back.
+            self.capture?.stopStreaming()
             self.state = .waiting
         }
         try await server.start()
@@ -241,9 +255,6 @@ public final class AndroidDisplay {
         //    this, so a missing adb is a warning rather than a failure.
         if Prefs.androidUSB { setUpReverseForwarding(port: port) }
 
-        capture.startStreaming(to: server,
-                               bitrateMbps: Prefs.androidBitrate,
-                               quality: "medium", gamingBoost: false, frameRate: fps)
         state = .waiting
     }
 
