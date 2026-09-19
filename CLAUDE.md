@@ -146,15 +146,22 @@ Sessions" behind, a closed one doesn't.
 The disconnect runs on the main thread inside the sleep window, so its timeout is
 4s — skipping the tidy-up is better than delaying sleep.
 
-**`-201` device timed out — not recoverable from the Mac.** The link is healthy:
-USB enumerates, IP over the cable pings, Bonjour resolves, Rapport pairs
-(`PairVerify completed (RPI-Owner)`), and the data link reaches `Ready` in ~34ms.
-The Mac then sends `AVC negotiate offer` and the iPad never sends the answer —
-11 `com.apple.sidecar` events out, 0 back. The iPad's Sidecar *receiver* is hung.
-Replugging the cable, killing `SidecarRelay`, toggling Handoff on the iPad, and
-all four transports were each tried and made no difference; only restarting the
-iPad cleared it. After the restart the same handshake produced `AVC negotiate
-answer (469 bytes)` and connected in 0.97s.
+**`-201` device timed out — usually just a locked iPad.** Sidecar will not start
+a session on a locked device, and macOS reports the refusal as a timeout. The
+link is healthy throughout: pairing succeeds, the data link reaches ready in
+~34ms, the Mac sends `AVC negotiate offer`, and the iPad — being locked — never
+answers. Eleven `com.apple.sidecar` events out, none back.
+
+Controlled on one iPad seconds apart: locked → `-201` after 10s; unlocked, no
+other change, no restart → connects in 1.0s. The ladder now reads
+`DeviceRestart.lockState` before rung 1 and returns `.deviceLocked` rather than
+climbing.
+
+This was diagnosed wrongly for most of the project's life as a hung Sidecar
+receiver, on the strength of restarting the iPad being the only thing that
+helped — which it appeared to do because unlocking happens on the way past.
+Replugging, killing the relay, toggling Handoff and forcing each transport were
+all tried against it; none of them unlocked the iPad, so none of them worked.
 
 Because every rung acts on the Mac, the ladder stops after `attemptsPerRung`
 consecutive `-201`s and returns `.deviceUnresponsive` rather than climbing. Each

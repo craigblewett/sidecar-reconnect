@@ -49,11 +49,15 @@ public enum RecoveryOutcome {
     /// `failed` because it calls for a different action from the user — nothing
     /// on this Mac will fix it — and because there's no point climbing further.
     case deviceUnresponsive
+    /// The iPad is sitting on its lock screen. Sidecar won't start a session on
+    /// a locked device and reports it as a timeout, which reads like a fault
+    /// and isn't one.
+    case deviceLocked(String)
 
     public var succeeded: Bool {
         switch self {
         case .alreadyConnected, .connected: return true
-        case .failed, .deviceUnresponsive:  return false
+        case .failed, .deviceUnresponsive, .deviceLocked: return false
         }
     }
 
@@ -63,8 +67,11 @@ public enum RecoveryOutcome {
         case .connected(let rung):   return "Reconnected (\(rung))."
         case .failed(let reason):    return "Couldn't reconnect: \(reason)"
         case .deviceUnresponsive:
-            return "The iPad answered the Mac but never started the screen session. "
-                 + "Restarting the iPad is the only known fix — nothing on this Mac will clear it."
+            return "The iPad answered the Mac but never started the screen session, "
+                 + "and it isn't locked. Restarting it is the only known fix."
+        case .deviceLocked(let name):
+            return "Unlock \(name) — Sidecar can't start a screen session on a "
+                 + "locked iPad. That's all this is; nothing is broken."
         }
     }
 }
@@ -118,6 +125,16 @@ public final class Recovery {
 
         if Sidecar.connectedDevice() != nil {
             return .alreadyConnected
+        }
+
+        // A locked iPad refuses a session and macOS reports it as a timeout, so
+        // it looks exactly like a fault. Asking first costs a second and saves
+        // climbing five rungs, restarting an iPad that was fine, and raising a
+        // system alert per attempt on the way.
+        if let device = try? Sidecar.resolve(wanted),
+           let lock = DeviceRestart.lockState(device.name), !lock.readyForSidecar {
+            step("\(device.name) is locked")
+            return .deviceLocked(device.name)
         }
 
         var lastError = "no Sidecar device was reachable"

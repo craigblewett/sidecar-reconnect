@@ -88,41 +88,41 @@ because SIP-disabled machines exist.
 Auto-reconnect only fires **if Sidecar was connected before the Mac slept**, so it
 restores what you had rather than barging in when you disconnected on purpose.
 
-## What it can't fix
+## The thing that was actually wrong
 
-There is a second, nastier failure where the iPad is reachable in every way that
-can be measured — USB enumerates, IP over the cable pings, Bonjour resolves,
-Rapport pairs, the data link reaches ready in about 34ms — and then the Mac sends
-the video negotiation offer and the iPad never answers. The Mac sends eleven
-Sidecar events and receives none back. The iPad's Sidecar *receiver* is hung.
+For a long time this looked like a hung Sidecar receiver on the iPad: the link
+is healthy in every measurable way — USB enumerates, IP over the cable pings,
+Bonjour resolves, Rapport pairs, the data link reaches ready in about 34ms — and
+then the Mac sends the video negotiation offer and the iPad never answers. Ten
+seconds later: `SidecarErrorDomain -201`, "the device timed out".
 
-No rung in this ladder can fix that, because every rung acts on the Mac.
-Replugging the cable, killing the Sidecar relay, toggling Handoff on the iPad and
-forcing each of the four transports were all tried against a live instance of it;
-only restarting the iPad cleared it.
+It is simpler than that. **Sidecar will not start a session on a locked iPad**,
+and macOS reports the refusal as a timeout, which reads like a fault.
 
-So the app detects it, and can now cure it. After a few consecutive `-201`
-timeouts it stops climbing rungs that cannot work — each failed attempt also
-raises a system alert, so a pointless full climb used to stack over a dozen
-dialogs — and, if you let it, restarts the iPad.
+Measured, one variable at a time, on the same iPad seconds apart:
 
-That last part uses `devicectl`, which ships with Xcode and can reboot a paired
-device. It asks for a **userspace** restart first: the OS userland comes back,
-daemons and all, without a cold boot. Measured on an iPad (A16): restart accepted
-in 1 second, Sidecar reconnected **11 seconds** after that. A full reboot is the
-fallback if userspace isn't available.
+| iPad | Result |
+| --- | --- |
+| locked (`passcodeRequired: true`) | `-201` after 10s |
+| unlocked, nothing else changed | connects in **1.0s** |
 
-**Restart iPad…** in the menu does it on demand, always behind a confirmation.
-**Restart iPad When It Hangs** under Extra Fixes lets the ladder do it unaided;
-it's off by default because it interrupts whatever is on the iPad.
+Which explains the original complaint end to end: the Mac sleeps, the session
+ends, the iPad auto-locks, and in the morning the Mac cannot connect because the
+iPad is sitting on its lock screen. Restarting the iPad appeared to fix it
+because you unlock it on the way past.
 
-Two requirements, both one-time: Xcode's device tools must be installed, and the
-iPad needs **Developer Mode** on (Settings › Privacy & Security › Developer
-Mode). Without it `devicectl` refuses with a bare `CoreDeviceError 10005`; the
-app checks first and says so in words.
+So the app asks first. `devicectl` reports the lock state, so a locked iPad is
+recognised in about a second and reported as **"Unlock iPad — Sidecar can't start
+a screen session on a locked iPad"** rather than climbing five rungs, restarting
+an iPad that was never broken, and raising a system alert per attempt.
 
-It's still Apple's bug. This doesn't stop the iPad hanging — it just means you
-don't have to pick it up.
+If it is genuinely unlocked and still times out, the ladder carries on and can
+restart the iPad as a last resort — but on the evidence so far, "unlock it" is
+the answer.
+
+**The practical fix:** if the iPad is a permanent second screen, set Auto-Lock to
+Never on it (Settings › Display & Brightness › Auto-Lock) and the problem stops
+happening rather than being recovered from.
 
 ## An Android tablet as a second display
 

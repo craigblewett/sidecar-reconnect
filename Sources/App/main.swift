@@ -145,6 +145,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if announceSuccess { self.notify(outcome.summary) }
             case .failed:
                 self.notify(outcome.summary)
+            case .deviceLocked:
+                // Worth saying on every run, automatic or not: it's the one
+                // outcome with a one-second fix the user can actually perform.
+                self.notify(outcome.summary)
             case .deviceUnresponsive:
                 // Always worth saying, even on an automatic run: this is the one
                 // outcome where the user has to do something we can't do for them.
