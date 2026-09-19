@@ -29,6 +29,7 @@ public enum Prefs {
         static let androidFrameRate = "androidFrameRate"
         static let androidWasSharing = "androidWasSharing"
         static let androidArrangement = "androidArrangement"
+        static let restartOnHang = "restartDeviceOnHang"
     }
 
     static func registerDefaults() {
@@ -52,6 +53,7 @@ public enum Prefs {
             Key.androidUSB: true,
             Key.androidFrameRate: 30,
             Key.androidArrangement: "right",
+            Key.restartOnHang: false,
         ])
     }
 
@@ -104,6 +106,14 @@ public enum Prefs {
     public static var androidArrangement: String {
         get { defaults.string(forKey: Key.androidArrangement) ?? "right" }
         set { defaults.set(newValue, forKey: Key.androidArrangement) }
+    }
+
+    /// Restart the iPad automatically when its Sidecar receiver hangs. Off by
+    /// default: it interrupts whatever is on the iPad, and that should be the
+    /// user's call rather than a surprise.
+    public static var restartDeviceOnHang: Bool {
+        get { defaults.bool(forKey: Key.restartOnHang) }
+        set { defaults.set(newValue, forKey: Key.restartOnHang) }
     }
 
     public static var androidTouch: Bool {

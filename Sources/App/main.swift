@@ -215,6 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add(menu, "Reconnect Now", #selector(reconnectNow), key: "r", enabled: !busy)
         add(menu, "Bounce Connection", #selector(bounceNow), enabled: !busy && connected != nil)
         add(menu, "Disconnect", #selector(disconnectNow), enabled: !busy && connected != nil)
+        add(menu, "Restart iPad…", #selector(restartDeviceNow),
+            enabled: !busy && DeviceRestart.isAvailable)
 
         if devices.count > 1 {
             menu.addItem(.separator())
@@ -422,6 +424,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         btItem.toolTip = "Drops Bluetooth keyboards and mice for a few seconds. Needs blueutil."
         extras.addItem(btItem)
 
+        let restartItem = NSMenuItem(title: "Restart iPad When It Hangs",
+                                     action: #selector(toggleRestartOnHang), keyEquivalent: "")
+        restartItem.target = self
+        restartItem.state = Prefs.restartDeviceOnHang ? .on : .off
+        restartItem.isEnabled = DeviceRestart.isAvailable
+        restartItem.toolTip = DeviceRestart.isAvailable
+            ? "Only when the iPad answers but won't start a screen session. Interrupts whatever is on it."
+            : "Needs Xcode's device tools, which aren't installed."
+        extras.addItem(restartItem)
+
         let uiItem = NSMenuItem(title: "Fall Back To Control Center",
                                 action: #selector(toggleUIFallback), keyEquivalent: "")
         uiItem.target = self
@@ -507,6 +519,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             DispatchQueue.main.async {
                 self?.refreshIcon()
+                self?.notify(message)
+            }
+        }
+    }
+
+    @objc private func toggleRestartOnHang() { Prefs.restartDeviceOnHang.toggle() }
+
+    @objc private func restartDeviceNow() {
+        let name = (try? Sidecar.resolve(Prefs.device.isEmpty ? nil : Prefs.device))?.name
+            ?? Prefs.device
+        guard !name.isEmpty else { return }
+
+        // Always confirmed, even though they picked it from the menu:
+        // restarting an iPad interrupts whatever is on it.
+        let alert = NSAlert()
+        alert.messageText = "Restart “\(name)”?"
+        alert.informativeText = "The iPad will restart, and anything unsaved on it may be lost.\n\n"
+            + "A quick restart of its software is tried first, falling back to a full reboot. "
+            + "This is what clears a Sidecar session the iPad has stopped answering."
+        alert.addButton(withTitle: "Restart")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        setWorking(true, step: "restarting \(name)")
+        DispatchQueue.global().async { [weak self] in
+            var message: String
+            do {
+                let style = try DeviceRestart.restart(name) { step in
+                    DispatchQueue.main.async { self?.setWorking(true, step: step) }
+                }
+                message = style == .userspace
+                    ? "Restarting \(name)'s software — it should be back shortly."
+                    : "Rebooting \(name) — it should be back in a minute or so."
+            } catch {
+                message = error.localizedDescription
+            }
+            DispatchQueue.main.async {
+                self?.setWorking(false)
                 self?.notify(message)
             }
         }

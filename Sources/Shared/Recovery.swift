@@ -162,7 +162,7 @@ public final class Recovery {
         // torn down, the relay just lost track of it.
         step("connecting")
         if tryConnect("connect") { return .connected(rung: "direct connect") }
-        if unresponsive { return .deviceUnresponsive }
+        if unresponsive { return restartAndRetry(wanted, step: step, tryConnect: tryConnect) }
 
         // Rung 2 — bounce the session. Clears a half-open state the connect
         // path won't overwrite on its own. This is the rung that recovers the
@@ -173,7 +173,7 @@ public final class Recovery {
             try? Sidecar.disconnect(device)
             Thread.sleep(forTimeInterval: 2)
             if tryConnect("bounce") { return .connected(rung: "session bounce") }
-            if unresponsive { return .deviceUnresponsive }
+            if unresponsive { return restartAndRetry(wanted, step: step, tryConnect: tryConnect) }
         }
 
         // Rung 3 — restart the user agents. Note this cannot do much on a stock
@@ -181,7 +181,7 @@ public final class Recovery {
         step("restarting Sidecar agents")
         restartAgents(step: step)
         if tryConnect("agents") { return .connected(rung: "agent restart") }
-        if unresponsive { return .deviceUnresponsive }
+        if unresponsive { return restartAndRetry(wanted, step: step, tryConnect: tryConnect) }
 
         // Rung 4 — Bluetooth. Off by default: it drops BT keyboards and mice.
         if Prefs.bounceBluetooth {
@@ -203,6 +203,34 @@ public final class Recovery {
         }
 
         return .failed(reason: lastError)
+    }
+
+    /// The last rung, and the only one that acts on the iPad rather than the
+    /// Mac. Reached only when the hang signature is certain, and only when the
+    /// user has opted in — restarting an iPad interrupts whatever is on it.
+    private func restartAndRetry(_ wanted: String?,
+                                 step: (String) -> Void,
+                                 tryConnect: (String) -> Bool) -> RecoveryOutcome {
+        guard Prefs.restartDeviceOnHang else { return .deviceUnresponsive }
+        guard let device = try? Sidecar.resolve(wanted) else { return .deviceUnresponsive }
+
+        do {
+            let style = try DeviceRestart.restart(device.name, progress: step)
+            step("waiting for \(device.name) to come back")
+            // A userspace restart is back in well under a minute; a full reboot
+            // needs longer. Poll rather than guess.
+            let deadline = Date().addingTimeInterval(style == .userspace ? 90 : 150)
+            while Date() < deadline {
+                Thread.sleep(forTimeInterval: 5)
+                if !Sidecar.devices().isEmpty, tryConnect("after restart") {
+                    return .connected(rung: "iPad restart")
+                }
+            }
+            step("\(device.name) didn't come back in time")
+        } catch {
+            step(error.localizedDescription)
+        }
+        return .deviceUnresponsive
     }
 
     // MARK: Rung implementations
