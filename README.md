@@ -101,12 +101,28 @@ Replugging the cable, killing the Sidecar relay, toggling Handoff on the iPad an
 forcing each of the four transports were all tried against a live instance of it;
 only restarting the iPad cleared it.
 
-So the app detects it instead. After a few consecutive `-201` timeouts it stops
-climbing and says the iPad answered but never started the screen session, rather
-than spending two minutes on rungs that cannot work — each failed attempt also
-raises a system alert from macOS, so a full pointless climb used to stack over a
-dozen dialogs. If you see that message, restart the iPad; it's an iPadOS bug, not
-something this app can route around.
+So the app detects it, and can now cure it. After a few consecutive `-201`
+timeouts it stops climbing rungs that cannot work — each failed attempt also
+raises a system alert, so a pointless full climb used to stack over a dozen
+dialogs — and, if you let it, restarts the iPad.
+
+That last part uses `devicectl`, which ships with Xcode and can reboot a paired
+device. It asks for a **userspace** restart first: the OS userland comes back,
+daemons and all, without a cold boot. Measured on an iPad (A16): restart accepted
+in 1 second, Sidecar reconnected **11 seconds** after that. A full reboot is the
+fallback if userspace isn't available.
+
+**Restart iPad…** in the menu does it on demand, always behind a confirmation.
+**Restart iPad When It Hangs** under Extra Fixes lets the ladder do it unaided;
+it's off by default because it interrupts whatever is on the iPad.
+
+Two requirements, both one-time: Xcode's device tools must be installed, and the
+iPad needs **Developer Mode** on (Settings › Privacy & Security › Developer
+Mode). Without it `devicectl` refuses with a bare `CoreDeviceError 10005`; the
+app checks first and says so in words.
+
+It's still Apple's bug. This doesn't stop the iPad hanging — it just means you
+don't have to pick it up.
 
 ## An Android tablet as a second display
 
