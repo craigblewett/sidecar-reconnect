@@ -77,7 +77,17 @@ public final class AndroidDisplay {
         return current.contains(last) ? nil : last
     }
 
-    public private(set) var pairing: Pairing?
+    /// Only the code is stored. The address is looked up every time this is
+    /// read, because a laptop moves between networks — a phone's hotspot
+    /// coming and going is enough — and an address captured when the code was
+    /// issued is stale by the time anyone types it.
+    public var pairing: Pairing? {
+        guard let code = pairingCode, let best = NetworkAddresses.preferred() else { return nil }
+        return Pairing(code: code, address: best.address, port: Prefs.androidPort,
+                       overCable: best.isDirectLink)
+    }
+
+    private var pairingCode: String?
 
     /// Tablets that have paired before. They hold a token and reconnect without
     /// a code, so the menu shouldn't wave a fresh one at the user as if the
@@ -237,7 +247,7 @@ public final class AndroidDisplay {
         }
         server.onClientConnected = { [weak self] in
             guard let self = self else { return }
-            self.pairing = nil           // paired and connected; stop advertising a code
+            self.pairingCode = nil       // paired and connected; stop advertising a code
             // Start capturing only now. The engine takes a
             // PreventUserIdleDisplaySleep assertion for as long as it is
             // streaming — correct while a tablet is watching, since a sleeping
@@ -277,8 +287,7 @@ public final class AndroidDisplay {
         server.expectedPairingCode = code
         let best = NetworkAddresses.preferred()
         let address = best?.address ?? LANAddressResolver.primaryIPv4() ?? "this Mac's IP address"
-        pairing = Pairing(code: code, address: address, port: Prefs.androidPort,
-                          overCable: best?.isDirectLink ?? false)
+        pairingCode = code
         if let best = best, best.isDirectLink {
             Log.write("pairing over the cable (\(best.interface)) — \(address):\(Prefs.androidPort) code \(PairingCode.display(code))")
         } else {
@@ -295,7 +304,7 @@ public final class AndroidDisplay {
         capture = nil
         server = nil
         display = nil
-        pairing = nil
+        pairingCode = nil
     }
 
     // MARK: Arrangement
