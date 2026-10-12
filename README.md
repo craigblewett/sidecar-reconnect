@@ -171,11 +171,22 @@ the Mac's address changes when it moves — joining a phone's hotspot is enough.
 The tablet then sits dialling an address nobody answers, and the only cure is to
 Forget the pairing and enter a new code.
 
-**USB tethering fixes that properly.** Turn it on from the tablet (Settings ›
-Mobile network › Tethering › USB tethering) and the cable becomes a small
-private network that is the same in every location — café, office, home. Pair
-once over it and the address never changes again. It is also the lower-latency
-path, and it needs no Developer options, unlike `adb reverse`.
+**USB tethering fixes that properly — when macOS can use it.** Turn it on from
+the tablet (Settings › Mobile network › Tethering › USB tethering) and the cable
+becomes a small private network that is the same in every location. Pair once
+over it and the address never changes again. It is also the lower-latency path,
+and needs no Developer options, unlike `adb reverse`.
+
+**But check it actually appears.** Android tethering is RNDIS on many devices —
+Huawei among them — and macOS has no RNDIS driver, so the tablet enumerates and
+then presents nothing macOS can use: no interface, no address, no clue as to
+why. Measured on a Huawei MatePad SE: tethering on, zero USB interfaces matched
+by macOS. Devices that tether over NCM or CDC-ECM work; RNDIS ones do not, and
+no setting on either side changes that.
+
+If a new interface with a `192.168.42.x` address appears after turning tethering
+on, you have the good case. If nothing appears, the cable is a dead end on macOS
+and wireless is the only route.
 
 The app spots that interface and offers its address for pairing ahead of the
 WiFi one, marked *(over USB)*.
