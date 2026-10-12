@@ -257,6 +257,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // The address and one-time code to type into the tablet. Shown only
         // while we're waiting for one — it disappears the moment it connects.
+        // A tablet that paired on another network is dialling an address this
+        // Mac no longer has. Nothing times out usefully in that situation, so
+        // say it outright rather than leaving a fresh code next to a tablet
+        // that cannot see us.
+        if let stale = android.staleAddress {
+            let warning = NSMenuItem(
+                title: "  Tablet is looking for \(stale) — this Mac has moved network",
+                action: nil, keyEquivalent: "")
+            warning.isEnabled = false
+            menu.addItem(warning)
+            let how = NSMenuItem(title: "  Tap Forget on the tablet, then pair again below",
+                                 action: nil, keyEquivalent: "")
+            how.isEnabled = false
+            menu.addItem(how)
+        }
+
         if let pairing = android.pairing {
             // A tablet that's paired before comes back on its own token — tell
             // the user to hit Reconnect rather than retyping a code.

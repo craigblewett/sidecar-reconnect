@@ -163,13 +163,26 @@ visible rather than guessed at. The Mac is rarely the constraint — if frame ag
 stays low and nothing is dropped, what's left is the tablet's decoder and the
 network.
 
-### Over a cable
+### Over a cable, and why you probably want it
 
-`adb reverse` is the lowest-latency path but needs USB Debugging, which not every
-tablet exposes — a Huawei MatePad on HarmonyOS has no Developer options at all.
-**USB tethering** gives the same cable without any of that: it puts the Mac on a
-small private network that exists only along the wire. The app spots that
-interface and offers its address for pairing, marked *(over USB)*.
+Neither end does service discovery: the tablet stores the Mac's IP address and
+dials it. That is fine on one network and falls apart across several, because
+the Mac's address changes when it moves — joining a phone's hotspot is enough.
+The tablet then sits dialling an address nobody answers, and the only cure is to
+Forget the pairing and enter a new code.
+
+**USB tethering fixes that properly.** Turn it on from the tablet (Settings ›
+Mobile network › Tethering › USB tethering) and the cable becomes a small
+private network that is the same in every location — café, office, home. Pair
+once over it and the address never changes again. It is also the lower-latency
+path, and it needs no Developer options, unlike `adb reverse`.
+
+The app spots that interface and offers its address for pairing ahead of the
+WiFi one, marked *(over USB)*.
+
+When a tablet has paired before against an address this Mac no longer has, the
+menu says so rather than quietly offering a fresh code beside a tablet that
+cannot see us.
 
 ## Install
 

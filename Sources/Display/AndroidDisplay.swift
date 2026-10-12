@@ -67,6 +67,16 @@ public final class AndroidDisplay {
     /// can tell which screen is the tablet.
     public var displayID: CGDirectDisplayID? { display?.displayID }
 
+    /// Set when a tablet has paired before against an address this Mac no
+    /// longer has. The tablet will keep dialling the old one and time out, and
+    /// no amount of waiting fixes it — it has to be re-paired.
+    public var staleAddress: String? {
+        let last = Prefs.lastPairedAddress
+        guard !last.isEmpty, !knownDevices.isEmpty else { return nil }
+        let current = NetworkAddresses.candidates().map(\.address)
+        return current.contains(last) ? nil : last
+    }
+
     public private(set) var pairing: Pairing?
 
     /// Tablets that have paired before. They hold a token and reconnect without
@@ -191,6 +201,7 @@ public final class AndroidDisplay {
         server.pairingMacName = Host.current().localizedName ?? "Mac"
         server.onPairingSuccess = { [weak self] device in
             Log.write("paired with \(device)")
+            Prefs.lastPairedAddress = self?.pairing?.address ?? ""
             PairedDeviceStore(defaults: Self.defaults)
                 .upsert(name: device, lastConnected: Date())
             self?.issuePairingCode(on: server)

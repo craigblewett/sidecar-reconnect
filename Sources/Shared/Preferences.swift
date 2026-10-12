@@ -30,6 +30,7 @@ public enum Prefs {
         static let androidWasSharing = "androidWasSharing"
         static let androidArrangement = "androidArrangement"
         static let restartOnHang = "restartDeviceOnHang"
+        static let lastPairedAddress = "lastPairedAddress"
     }
 
     static func registerDefaults() {
@@ -114,6 +115,16 @@ public enum Prefs {
     public static var restartDeviceOnHang: Bool {
         get { defaults.bool(forKey: Key.restartOnHang) }
         set { defaults.set(newValue, forKey: Key.restartOnHang) }
+    }
+
+    /// The address a tablet was last paired against. Tablets store the Mac's
+    /// IP, and an IP changes whenever the Mac moves between networks — joining a
+    /// phone's hotspot is enough. Keeping it lets the menu say "the tablet is
+    /// looking for an address this Mac no longer has" instead of advertising a
+    /// new one beside a tablet that will never dial it.
+    public static var lastPairedAddress: String {
+        get { defaults.string(forKey: Key.lastPairedAddress) ?? "" }
+        set { defaults.set(newValue, forKey: Key.lastPairedAddress) }
     }
 
     public static var androidTouch: Bool {
